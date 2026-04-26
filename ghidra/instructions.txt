@@ -5,7 +5,7 @@ GHIDRA SETUP — PokemonStadiumRecomp
 Goal: import Pokémon Stadium (US v1.0) into Ghidra for analysis.
 
 Recommended workflow: import pret's post-build ELF
-(`disasm/build/us/pokestadium.elf`), which already has every
+(`disasm/build/pokestadium-us.elf`), which already has every
 section at its correct load VA plus symbols. This is far simpler
 than importing the raw ROM and reconstructing addresses by hand.
 
@@ -27,7 +27,7 @@ Prereqs
 -------
 1. Ghidra 11.x or newer (https://ghidra-sre.org/).
 2. The pret disasm built — `cd disasm && make init && make`
-   produces `disasm/build/us/pokestadium.elf`. This requires a
+   produces `disasm/build/pokestadium-us.elf`. This requires a
    MIPS toolchain (binutils-mips-linux-gnu) which on Windows
    typically means WSL. See ../docs/disasm-build.md (TODO).
 3. (Optional) The Ghidra-N64 loader extension if you want to
@@ -44,7 +44,7 @@ Project creation
 
 Step 1 — Import the post-build ELF (recommended path)
 -----------------------------------------------------
-File → Import File → select `disasm/build/us/pokestadium.elf`.
+File → Import File → select `disasm/build/pokestadium-us.elf`.
 
 Format:           ELF (auto-detected)
 Language:         MIPS:BE:32:default

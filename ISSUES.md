@@ -18,7 +18,7 @@ a new work session.
       Requires MIPS binutils + make + python. On Windows this
       means WSL2 — full instructions in `docs/disasm-build.md`.
 - [ ] Wire `game.toml` to point at the produced ELF
-      (`disasm/build/us/pokestadium.elf`).
+      (`disasm/build/pokestadium-us.elf`).
 - [ ] First N64Recomp run against the ELF. Expect warnings on
       indirect call sites and unmapped relocations — triage them.
 - [ ] CMake target that invokes `N64RecompCLI` and depends on

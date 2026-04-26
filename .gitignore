@@ -49,3 +49,5 @@ _experimental_*
 *.srm
 *.state
 saves.txt
+tools/_derive.stderr
+tools/_splice.py

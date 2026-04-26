@@ -1,7 +1,7 @@
 # Building pret/pokestadium on Windows
 
 The disasm is the upstream of our recomp pipeline — it produces
-`disasm/build/us/pokestadium.elf`, which N64Recomp and Ghidra both
+`disasm/build/pokestadium-us.elf`, which N64Recomp and Ghidra both
 consume. Without this ELF, neither pipeline has section addresses
 or symbols.
 
@@ -46,7 +46,7 @@ md5sum build/pokestadium-us.z64
 # expected: ed1378bc12115f71209a77844965ba50
 ```
 
-The ELF lands at `disasm/build/us/pokestadium.elf` — visible from
+The ELF lands at `disasm/build/pokestadium-us.elf` — visible from
 both WSL (`/mnt/f/...`) and the Windows side, so N64Recomp picks it
 up directly.
 
@@ -89,16 +89,16 @@ Not recommended unless WSL2 is unavailable for policy reasons.
 ## After a successful build
 
 The build produces:
-- `disasm/build/us/pokestadium-us.z64` — should md5 to
+- `disasm/build/pokestadium-us.z64` — should md5 to
   `ed1378bc12115f71209a77844965ba50`. If it doesn't, the ROM
   staged at `disasm/baseroms/us/baserom.z64` is wrong revision.
-- `disasm/build/us/pokestadium.elf` — what we feed N64Recomp.
-- `disasm/build/us/pokestadium.map` — linker map, useful for
+- `disasm/build/pokestadium-us.elf` — what we feed N64Recomp.
+- `disasm/build/pokestadium-us.map` — linker map, useful for
   Ghidra symbol cross-reference.
 - `disasm/build/lib/...` — intermediate libraries; ignore.
 
 Once the ELF exists, point `game.toml`'s `[input].elf` at it
-(already done — `disasm/build/us/pokestadium.elf`) and the
+(already done — `disasm/build/pokestadium-us.elf`) and the
 N64Recomp pipeline can run.
 
 ## Troubleshooting
