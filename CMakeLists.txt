@@ -60,6 +60,7 @@ target_sources(RecompiledFuncs PRIVATE ${FUNC_C_SOURCES})
 add_executable(PokemonStadiumRecomp
     src/main/main.cpp
     src/main/rt64_render_context.cpp
+    src/main/debug_server.cpp
     extras.c
     # Generated lookup table (provides get_entrypoint_address etc).
     generated/lookup.cpp

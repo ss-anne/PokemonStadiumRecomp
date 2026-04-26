@@ -49,6 +49,7 @@
 #include <ultramodern/error_handling.hpp>
 
 #include "pokestadium_render.h"
+#include "debug_server.h"
 
 extern "C" void recomp_entrypoint(uint8_t* rdram, recomp_context* ctx);
 
@@ -152,6 +153,13 @@ static void queue_samples(int16_t* audio_data, size_t sample_count) {
 }
 
 static size_t get_frames_remaining() {
+    // Fast-forward: report an empty audio buffer so the game thread
+    // keeps generating audio chunks (and advancing logic) without
+    // waiting for playback. Real audio queues will desync but the
+    // game runs as fast as the host can recompile + render.
+    if (pkmnstadium::dbg::g_fast_forward.load()) {
+        return 0;
+    }
     constexpr float buffer_offset_frames = 1.0f;
     uint64_t buffered_byte_count = SDL_GetQueuedAudioSize(audio_device);
     buffered_byte_count = buffered_byte_count * 2 * sample_rate / output_sample_rate / output_channels;
@@ -254,6 +262,15 @@ static bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_ou
     *x_out = 0.0f;
     *y_out = 0.0f;
 
+    // TCP debug-server input override takes priority over physical pad.
+    // Lets a debugger script press buttons / move stick over the wire.
+    if (controller_num == 0 && pkmnstadium::dbg::g_input_override_active.load()) {
+        *buttons_out = pkmnstadium::dbg::g_buttons_override.load();
+        *x_out = float(pkmnstadium::dbg::g_stick_x_override.load());
+        *y_out = float(pkmnstadium::dbg::g_stick_y_override.load());
+        return true;
+    }
+
     if (controller_num != 0 || !g_pad) return false;
 
     auto pressed = [&](SDL_GameControllerButton b) {
@@ -355,6 +372,11 @@ int main(int argc, char** argv) {
     reset_audio(48000);
     std::fprintf(stderr, "[PSR] reset_audio done\n"); std::fflush(stderr);
 
+    // Start the TCP debug server before recomp::start so a debugger
+    // script can connect immediately and observe the boot.
+    pkmnstadium::dbg::start(4370);
+    std::fprintf(stderr, "[PSR] debug server started on tcp:4370\n"); std::fflush(stderr);
+
     recomp::Version project_version{0, 1, 0, ""};
     recomp::register_config_path(std::filesystem::current_path());
 
@@ -393,18 +415,13 @@ int main(int argc, char** argv) {
         .create_window = create_window,
         .update_gfx    = update_gfx,
     };
-    // VI heartbeat — fires each VI interrupt. Logs to file every 60 ticks
-    // (~1 second of game-time at 60Hz) so we can confirm the renderer is
-    // alive without spamming stderr.
+    // VI heartbeat — published to TCP debug server (g_vi_ticks) so a
+    // debugger client can poll {"cmd":"status"} to confirm the renderer
+    // is alive. Also bumps frame counter; counter / VI tick should
+    // advance at roughly 60Hz when the game is running normally.
     static auto vi_heartbeat = []() {
-        static int tick = 0;
-        if ((tick++ % 60) == 0) {
-            FILE* f = fopen("F:/Projects/PokemonStadiumRecomp/build/heartbeat.log", "a");
-            if (f) {
-                fprintf(f, "VI tick %d\n", tick);
-                fclose(f);
-            }
-        }
+        pkmnstadium::dbg::g_vi_ticks.fetch_add(1);
+        pkmnstadium::dbg::g_frame_count.fetch_add(1);
     };
     ultramodern::events::callbacks_t events_callbacks{
         .vi_callback = vi_heartbeat,
