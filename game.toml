@@ -1941,5 +1941,12 @@ vram = 0x8120A73C
 size = 0x124
 
 # ── Patches ─────────────────────────────────────────────────────────────────
-# When real renames or instruction patches are needed, declare
-# them here. Empty until then. No stubs, ever.
+# Ignored functions: symbols defined by both the recompiled ELF
+# (pret bundles libultra source) AND librecomp's reimplementations.
+# Listed here so the engine appends _recomp to the symbol from
+# the ELF and the link picks librecomp's version.
+# Add more entries as the linker reports duplicate-symbol errors.
+[patches]
+ignored = [
+    "osSetTime",
+]

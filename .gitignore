@@ -51,3 +51,4 @@ _experimental_*
 saves.txt
 tools/_derive.stderr
 tools/_splice.py
+lib/
