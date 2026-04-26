@@ -1,0 +1,84 @@
+# game.toml — Pokémon Stadium (US v1.0)
+#
+# N64Recomp configuration. Single source of truth for what the
+# recompiler treats as code, data, manual entries, stubs, ignores,
+# and overlay sections.
+#
+# This file is INCOMPLETE. The [input] block below points at the
+# ELF that pret's disasm produces; populate the rest after the
+# first N64Recomp run reveals what manual_funcs / patches are
+# actually needed.
+
+[input]
+# The verified v1.0 ROM. CMake asserts MD5 ed1378bc...
+rom = "baserom.z64"
+
+# The ELF that pret's disasm produces after `make init && make`
+# in disasm/. Carries:
+#   - section addresses (resident text + 77 fragments + tail
+#     asset segments)
+#   - symbol names (what pret has decompiled + named so far)
+#   - relocations (HI16/LO16 pairs, R_MIPS_26, etc.)
+#
+# N64Recomp reads from this — there is no separate per-fragment
+# slicing step.
+elf = "disasm/build/us/pokestadium.elf"
+
+# Output directory for generated C — gitignored.
+output_dir = "generated"
+output_func_path = "generated/pokestadium_full.c"
+
+[basic_info]
+# One C file per function for fast iteration via the linker
+# `-u <symbol>` override trick. Flip to false if regen becomes
+# slower than build.
+single_file_output = false
+use_absolute_symbols = false
+funcs_per_file = 200
+
+# ── Sections ────────────────────────────────────────────────────────────────
+# Most sections (resident text, 77 fragments, tail assets) are
+# discovered automatically from the ELF's section table — N64Recomp
+# walks .text, .data, .rodata, and any sections marked SHF_ALLOC.
+#
+# Override here only when:
+#   - A section needs a non-default treatment (e.g., RSP microcode
+#     handled separately by RSPRecomp).
+#   - The 2 placeholder-VRAM fragment collisions
+#     (`0x8FC00000`, `0x88920000`) need explicit overlay flagging.
+#     Defer until they actually cause an analysis problem.
+
+# ── Manual functions ────────────────────────────────────────────────────────
+# Functions whose existence isn't discoverable from the ELF symbol
+# table — typically targets of indirect calls reached via dispatch
+# tables, or hand-coded asm without symbols.
+#
+# Populate empirically: run N64Recomp, look for "indirect call to
+# unknown target" warnings, add entries here, regen.
+#
+# [[manual_funcs]]
+# name = "func_..."
+# vram = 0x...
+# size = 0x...
+
+# ── Patches ─────────────────────────────────────────────────────────────────
+# Stubs for GB Tower (out of scope for first pass). Add entries
+# as call edges reveal them. Symbols of interest: gb_tower,
+# gb_mbc, "load gb emulator" near 0xB230 / 0xE1C0 / 0xE570 in
+# the resident text segment.
+
+[[patches.stubs]]
+# Example, not a real entry yet:
+# name = "gb_tower_init"
+# vram = 0x80...
+
+# Functions to skip entirely (not stub) — typically initialization
+# we want the C runtime to handle differently.
+# [[patches.ignored]]
+# name = "..."
+
+# Renames — when a pret symbol name conflicts with a runtime
+# symbol or a C keyword, rename here.
+# [[patches.renamed]]
+# from = "..."
+# to   = "..."

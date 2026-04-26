@@ -1,0 +1,144 @@
+================================================================
+GHIDRA SETUP — PokemonStadiumRecomp
+================================================================
+
+Goal: import Pokémon Stadium (US v1.0) into Ghidra for analysis.
+
+Recommended workflow: import pret's post-build ELF
+(`disasm/build/us/pokestadium.elf`), which already has every
+section at its correct load VA plus symbols. This is far simpler
+than importing the raw ROM and reconstructing addresses by hand.
+
+Pokemon Stadium's 77 fragments mostly load at UNIQUE VRAM
+addresses (verified from `disasm/yamls/us/rom.yaml`). Unlike
+NES bank-switching, you do NOT need to import each fragment as
+its own Ghidra Overlay Memory Block. Almost everything fits in
+one flat address space.
+
+Two known caveats:
+- VRAM `0x8FC00000` is shared by 2 fragments (placeholder,
+  pret comments "unk VRAM, shuts linker up").
+- VRAM `0x88920000` similarly shared by 2 fragments.
+If Ghidra surfaces conflicts at these addresses, treat the
+2 collision groups as overlays — see "Overlay handling for
+collisions" at the bottom.
+
+Prereqs
+-------
+1. Ghidra 11.x or newer (https://ghidra-sre.org/).
+2. The pret disasm built — `cd disasm && make init && make`
+   produces `disasm/build/us/pokestadium.elf`. This requires a
+   MIPS toolchain (binutils-mips-linux-gnu) which on Windows
+   typically means WSL. See ../docs/disasm-build.md (TODO).
+3. (Optional) The Ghidra-N64 loader extension if you want to
+   import the raw .z64 instead of the ELF:
+     https://github.com/Hakkenker/Ghidra-N64
+
+Project creation
+----------------
+1. Launch Ghidra. File → New Project → Non-Shared Project.
+2. Name: PokemonStadiumRecomp
+   Location: F:\Projects\PokemonStadiumRecomp\ghidra\projects\
+   (the projects/ subdir is gitignored — Ghidra writes
+   .gpr/.lock files there which are large and machine-specific)
+
+Step 1 — Import the post-build ELF (recommended path)
+-----------------------------------------------------
+File → Import File → select `disasm/build/us/pokestadium.elf`.
+
+Format:           ELF (auto-detected)
+Language:         MIPS:BE:32:default
+Compiler:         IDO (matches pret's options.compiler)
+Apply Processor Defined Labels: yes
+Apply Processor Relocations:    yes
+
+Auto-analysis: accept defaults. The ELF contains pret's already-
+named functions, so you'll get human-readable symbols out of the
+box. Analysis will take 5–15 minutes.
+
+Step 2 — Verify section coverage
+--------------------------------
+After analysis, Window → Memory Map. You should see one block per
+ELF section:
+- .boot at 0xA4000040
+- .text at 0x80000400  (resident kernel)
+- 77 fragment .text/.data/.rodata blocks at distinct VAs
+- .bss / scratchpad / RDRAM mirror as needed
+
+If a fragment is missing, it's because the disasm hasn't placed
+that fragment in the linker script yet — check
+`disasm/linker_scripts/us/pokestadium.ld`.
+
+Step 3 — Re-run with the raw ROM (alternative path)
+---------------------------------------------------
+Use this only if the disasm build is broken or you want to
+analyze ROM-level structure outside the ELF's lens.
+
+File → Import File → select baserom.z64.
+Format:        N64 ROM (provided by Ghidra-N64 loader)
+Language:      MIPS:BE:32:default
+Compiler:      default
+Base address:  let the loader pick (parses ROM header)
+
+This gives you ONE flat memory block at the ROM entry VA. You
+won't get fragment boundaries or symbols — that's why the ELF
+path is preferred.
+
+Overlay handling for the 2 collision groups
+-------------------------------------------
+If Ghidra complains about address conflicts at `0x8FC00000` or
+`0x88920000` (both placeholder VRAMs in pret's segment table),
+re-import the conflicting fragments as Overlay Memory Blocks:
+
+  Window → Memory Map → "+" (Add Block)
+    Block Name:    fragment_<n>
+    Start Address: 0x8FC00000   (or 0x88920000)
+    Length:        <size from rom.yaml>
+    Type:          File Bytes
+    Source File:   <ROM offset slice>
+    Overlay:       check this box
+    Permissions:   R, X
+
+Each overlay block lives in its own overlay space, so the two
+fragments at 0x8FC00000 stay distinct. You'd need this for at
+most 4 fragments total — not the 77-block ingestion the original
+plan called for.
+
+What's in version control under ghidra/
+---------------------------------------
+- instructions.txt   (this file)
+- scripts/           (Ghidra Python scripts — to be added if
+                     repeatable workflows emerge)
+- annotations/       (exported labels/comments — to be added
+                     and hand-curated)
+
+What's NOT in version control
+-----------------------------
+- ghidra/projects/   (live Ghidra database)
+- ghidra/*.gpr       (Ghidra project file)
+- ghidra/*.lock      (Ghidra lock files)
+- ghidra/*.rep       (Ghidra repo files)
+
+Each contributor maintains their own local Ghidra project.
+
+Troubleshooting
+---------------
+- "Cannot find ELF" → run `make init && make` in disasm/. On
+  Windows you'll need WSL or another MIPS toolchain host.
+- "Bad ROM signature" (raw ROM path) → file is not native
+  big-endian z64. Magic must be 80 37 12 40. Run a byteswap
+  utility for .v64 / .n64 dumps.
+- "Address conflict at 0x8FC00000" → see "Overlay handling for
+  the 2 collision groups" above.
+- Auto-analysis hangs on a section → likely pure data or yay0-
+  compressed asset blob. Right-click block → Set Read-Only Data,
+  skip analysis on that block.
+
+Reference
+---------
+- pret/pokestadium yamls/us/rom.yaml — segment authority.
+- pret/pokestadium linker_scripts/us/pokestadium.ld — final
+  link layout (matches the ELF you import).
+- Ghidra overlay memory blocks (only relevant for the 2
+  collision groups):
+    https://ghidra.re/ghidra_docs/api/ghidra/program/model/mem/MemoryBlock.html

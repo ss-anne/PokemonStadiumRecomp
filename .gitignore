@@ -1,0 +1,51 @@
+build/
+build-*/
+*.o
+*.obj
+*.exe
+*.pdb
+*.ilk
+*.lib
+*.exp
+*.user
+
+# Generated recompiler output (regen via N64Recomp)
+generated/
+
+# Ghidra project state
+ghidra/*.lock
+ghidra/*.lock~
+ghidra/*.gpr.bak
+ghidra/projects/
+
+# Ares emulator build artifacts (submoduled at ares-emulator/)
+ares-emulator/
+
+# N64Recomp engine checkout (cloned by setup.bat/sh, not committed)
+n64recomp/
+
+# Editor / OS
+.vs/
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Logs and temp
+*.log
+_tmp_*
+_baseline_*
+_experimental_*
+
+# ROM data (don't redistribute)
+*.z64
+*.n64
+*.v64
+
+# Save / dump
+*.sav
+*.srm
+*.state
+saves.txt
