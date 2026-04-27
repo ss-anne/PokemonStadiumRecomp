@@ -4,6 +4,33 @@ text_address = 0x04001000
 rom_file_path = "baserom.z64"
 output_file_path = "rsp/aspMain.cpp"
 output_function_name = "aspMain"
+# Dispatch handler table values, as observed in DMEM[0..0x1F] after
+# the runtime's DMA load of ucode_data:
+#   0x10EC 0x139C 0x119C 0x1A64 0x11C8 0x17EC 0x1208 0x0000
+#   0x0000 0x127C 0x1348 0x1248 0x1C84 0x12D4 0x02B0 0x1384
+#
+# Each is the PC of an audio-command handler; the L_1048 dispatch
+# loop uses `lh DMEM[(r26 >> 23) & 0xFE]` then `jr` to reach them.
+# The recompiler can't infer these from static analysis (the table
+# is in data, not text), so they need to be declared as indirect
+# branch targets explicitly. Without them, any handler call from
+# dispatch hits "Unhandled jump target" and exits.
+#
+# 0x02B0 ((| 0x1000) & 0x1FFF = 0x12B0) is included for completeness
+# even though if dispatch ever lands there it indicates a bug
+# upstream — that PC sits inside the data segment, not text.
 extra_indirect_branch_targets = [
-    0x10EC,
+    0x10EC, 0x139C, 0x119C, 0x1A64, 0x11C8, 0x17EC, 0x1208, 0x127C,
+    0x1348, 0x1248, 0x12D4, 0x12B0, 0x1384,
+    # Plus the dead-code init function entry at 0x10A0. Stadium's boot
+    # path skips it but if a refactor calls it indirectly we want
+    # the recompiler to handle the branch correctly.
+    0x10A0,
+    # NOTE: dispatch[12] = 0x1C84 (= PC 0x1C84) was in the table but
+    # it's outside Stadium's text range (text ends at PC 0x1C60).
+    # That handler slot must be for a command Stadium doesn't issue
+    # in normal audio frames (or text_size is actually larger than
+    # 0xC60). Excluded for now; if it gets dispatched the recompiler
+    # will print "Unhandled jump target" and the watchdog will catch
+    # any resulting loop.
 ]

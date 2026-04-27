@@ -62,6 +62,7 @@ add_executable(PokemonStadiumRecomp
     src/main/rt64_render_context.cpp
     src/main/debug_server.cpp
     src/main/register_overlays.cpp
+    src/main/rsp_aspmain_hook.cpp
     extras.c
     # Generated lookup table (provides get_entrypoint_address etc).
     generated/lookup.cpp

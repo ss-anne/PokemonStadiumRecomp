@@ -43,7 +43,8 @@ L_1020:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // andi        $4, $4, 0x100
@@ -65,7 +66,8 @@ L_102C:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // addi        $24, $zero, 0xFA0
@@ -86,7 +88,8 @@ L_1038:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // mfc0        $2, SP_DMA_BUSY
@@ -100,7 +103,8 @@ L_103C:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $2, $zero, L_103C
@@ -121,7 +125,8 @@ L_1048:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // lw          $26, 0x0($29)
@@ -155,7 +160,8 @@ L_106C:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bgtz        $30, L_1048
@@ -190,7 +196,8 @@ L_1084:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // j           L_10BC
@@ -208,7 +215,8 @@ L_108C:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // mtc0        $1, SP_STATUS
@@ -225,7 +233,8 @@ L_1098:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // b           L_1098
@@ -234,6 +243,19 @@ L_1098:
     goto L_1098;
     // nop
 
+L_10A0:
+    ctx->pc_trail[ctx->pc_trail_idx & 31] = 0x10A0;
+    ctx->pc_trail_idx++;
+    if (++ctx->watchdog_count > 100000000ULL) {
+        fprintf(stderr, "[rsp watchdog] hung at PC 0x10A0 after %llu transitions; PC trail (oldest..newest):\n", (unsigned long long)ctx->watchdog_count);
+        for (uint32_t i = 0; i < 32; i++) {
+            uint32_t pos = (ctx->pc_trail_idx + i) & 31;
+            fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
+        }
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
+        return RspExitReason::Watchdog;
+    }
     // addi        $5, $ra, 0x0
     r5 = RSP_ADD32(r31, 0X0);
     // addi        $3, $27, 0x0
@@ -259,7 +281,8 @@ L_10B8:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // addi        $30, $3, 0x0
@@ -273,7 +296,8 @@ L_10BC:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // jal         0x114C
@@ -292,7 +316,8 @@ L_10C4:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // jr          $5
@@ -314,7 +339,8 @@ L_10D0:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $4, $zero, L_10D0
@@ -336,7 +362,8 @@ L_10DC:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $4, $zero, L_10DC
@@ -360,7 +387,8 @@ L_10EC:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // jr          $ra
@@ -382,7 +410,8 @@ L_10F8:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $4, $zero, L_10F8
@@ -404,7 +433,8 @@ L_1104:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $4, $zero, L_1104
@@ -438,7 +468,8 @@ L_1120:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // vxor        $v1, $v1, $v1
@@ -456,7 +487,8 @@ L_112C:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // sdv         $v1[0], 0x0($1)
@@ -490,7 +522,8 @@ L_114C:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // srl         $3, $3, 20
@@ -529,7 +562,8 @@ L_1174:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // mfc0        $1, SP_DMA_BUSY
@@ -543,7 +577,8 @@ L_1178:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $1, $zero, L_1178
@@ -572,6 +607,19 @@ L_1178:
     r30 = RSP_ADD32(r30, -0X8);
     // andi        $1, $26, 0xFFF
     r1 = r26 & 0XFFF;
+L_119C:
+    ctx->pc_trail[ctx->pc_trail_idx & 31] = 0x119C;
+    ctx->pc_trail_idx++;
+    if (++ctx->watchdog_count > 100000000ULL) {
+        fprintf(stderr, "[rsp watchdog] hung at PC 0x119C after %llu transitions; PC trail (oldest..newest):\n", (unsigned long long)ctx->watchdog_count);
+        for (uint32_t i = 0; i < 32; i++) {
+            uint32_t pos = (ctx->pc_trail_idx + i) & 31;
+            fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
+        }
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
+        return RspExitReason::Watchdog;
+    }
     // addi        $1, $1, 0x4F0
     r1 = RSP_ADD32(r1, 0X4F0);
     // sll         $2, $25, 8
@@ -596,7 +644,8 @@ L_11B4:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // mfc0        $1, SP_DMA_BUSY
@@ -610,7 +659,8 @@ L_11B8:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $1, $zero, L_11B8
@@ -625,6 +675,19 @@ L_11B8:
     // mtc0        $zero, SP_SEMAPHORE
     goto L_10EC;
     // mtc0        $zero, SP_SEMAPHORE
+L_11C8:
+    ctx->pc_trail[ctx->pc_trail_idx & 31] = 0x11C8;
+    ctx->pc_trail_idx++;
+    if (++ctx->watchdog_count > 100000000ULL) {
+        fprintf(stderr, "[rsp watchdog] hung at PC 0x11C8 after %llu transitions; PC trail (oldest..newest):\n", (unsigned long long)ctx->watchdog_count);
+        for (uint32_t i = 0; i < 32; i++) {
+            uint32_t pos = (ctx->pc_trail_idx + i) & 31;
+            fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
+        }
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
+        return RspExitReason::Watchdog;
+    }
     // sll         $2, $25, 8
     r2 = S32(r25) << 8;
     // srl         $2, $2, 8
@@ -651,7 +714,8 @@ L_11E4:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // mfc0        $1, SP_DMA_BUSY
@@ -665,7 +729,8 @@ L_11E8:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $1, $zero, L_11E8
@@ -692,6 +757,19 @@ L_11E8:
         // andi        $1, $3, 0x2
         r1 = r3 & 0X2;
         goto L_123C;
+    }
+L_1208:
+    ctx->pc_trail[ctx->pc_trail_idx & 31] = 0x1208;
+    ctx->pc_trail_idx++;
+    if (++ctx->watchdog_count > 100000000ULL) {
+        fprintf(stderr, "[rsp watchdog] hung at PC 0x1208 after %llu transitions; PC trail (oldest..newest):\n", (unsigned long long)ctx->watchdog_count);
+        for (uint32_t i = 0; i < 32; i++) {
+            uint32_t pos = (ctx->pc_trail_idx + i) & 31;
+            fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
+        }
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
+        return RspExitReason::Watchdog;
     }
     // andi        $1, $3, 0x2
     r1 = r3 & 0X2;
@@ -724,7 +802,8 @@ L_1228:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // sh          $26, 0x46($24)
@@ -748,7 +827,8 @@ L_123C:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // srl         $2, $25, 16
@@ -757,6 +837,19 @@ L_123C:
     RSP_MEM_H_STORE(0X40, r24, r26);
     // sh          $2, 0x42($24)
     RSP_MEM_H_STORE(0X42, r24, r2);
+L_1248:
+    ctx->pc_trail[ctx->pc_trail_idx & 31] = 0x1248;
+    ctx->pc_trail_idx++;
+    if (++ctx->watchdog_count > 100000000ULL) {
+        fprintf(stderr, "[rsp watchdog] hung at PC 0x1248 after %llu transitions; PC trail (oldest..newest):\n", (unsigned long long)ctx->watchdog_count);
+        for (uint32_t i = 0; i < 32; i++) {
+            uint32_t pos = (ctx->pc_trail_idx + i) & 31;
+            fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
+        }
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
+        return RspExitReason::Watchdog;
+    }
     // sh          $25, 0x44($24)
     RSP_MEM_H_STORE(0X44, r24, r25);
     // j           L_10EC
@@ -782,7 +875,8 @@ L_1264:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // lqv         $v1[0], 0x0($2)
@@ -797,6 +891,19 @@ L_1264:
     r3 = RSP_ADD32(r3, 0X10);
     // ssv         $v1[0], 0x0($4)
     rsp.SSV<0>(rsp.vpu.r[1], r4, 0X0);
+L_127C:
+    ctx->pc_trail[ctx->pc_trail_idx & 31] = 0x127C;
+    ctx->pc_trail_idx++;
+    if (++ctx->watchdog_count > 100000000ULL) {
+        fprintf(stderr, "[rsp watchdog] hung at PC 0x127C after %llu transitions; PC trail (oldest..newest):\n", (unsigned long long)ctx->watchdog_count);
+        for (uint32_t i = 0; i < 32; i++) {
+            uint32_t pos = (ctx->pc_trail_idx + i) & 31;
+            fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
+        }
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
+        return RspExitReason::Watchdog;
+    }
     // ssv         $v2[0], 0x2($4)
     rsp.SSV<0>(rsp.vpu.r[2], r4, 0X1);
     // ssv         $v1[2], 0x4($4)
@@ -823,6 +930,19 @@ L_1264:
     rsp.SSV<12>(rsp.vpu.r[1], r4, 0XC);
     // ssv         $v2[12], 0x1A($4)
     rsp.SSV<12>(rsp.vpu.r[2], r4, 0XD);
+L_12B0:
+    ctx->pc_trail[ctx->pc_trail_idx & 31] = 0x12B0;
+    ctx->pc_trail_idx++;
+    if (++ctx->watchdog_count > 100000000ULL) {
+        fprintf(stderr, "[rsp watchdog] hung at PC 0x12B0 after %llu transitions; PC trail (oldest..newest):\n", (unsigned long long)ctx->watchdog_count);
+        for (uint32_t i = 0; i < 32; i++) {
+            uint32_t pos = (ctx->pc_trail_idx + i) & 31;
+            fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
+        }
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
+        return RspExitReason::Watchdog;
+    }
     // ssv         $v1[14], 0x1C($4)
     rsp.SSV<14>(rsp.vpu.r[1], r4, 0XE);
     // ssv         $v2[14], 0x1E($4)
@@ -847,6 +967,19 @@ L_1264:
     r2 = r26 & 0XFFFF;
     // addi        $2, $2, 0x4F0
     r2 = RSP_ADD32(r2, 0X4F0);
+L_12D4:
+    ctx->pc_trail[ctx->pc_trail_idx & 31] = 0x12D4;
+    ctx->pc_trail_idx++;
+    if (++ctx->watchdog_count > 100000000ULL) {
+        fprintf(stderr, "[rsp watchdog] hung at PC 0x12D4 after %llu transitions; PC trail (oldest..newest):\n", (unsigned long long)ctx->watchdog_count);
+        for (uint32_t i = 0; i < 32; i++) {
+            uint32_t pos = (ctx->pc_trail_idx + i) & 31;
+            fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
+        }
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
+        return RspExitReason::Watchdog;
+    }
     // srl         $3, $25, 16
     r3 = S32(U32(r25) >> 16);
     // addi        $3, $3, 0x4F0
@@ -860,7 +993,8 @@ L_12DC:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // ldv         $v1[0], 0x0($2)
@@ -925,6 +1059,19 @@ L_12DC:
     r1 = RSP_ADD32(r1, 0X4F0);
     // vxor        $v15, $v15, $v15
     rsp.VXOR<0>(rsp.vpu.r[15], rsp.vpu.r[15], rsp.vpu.r[15]);
+L_1348:
+    ctx->pc_trail[ctx->pc_trail_idx & 31] = 0x1348;
+    ctx->pc_trail_idx++;
+    if (++ctx->watchdog_count > 100000000ULL) {
+        fprintf(stderr, "[rsp watchdog] hung at PC 0x1348 after %llu transitions; PC trail (oldest..newest):\n", (unsigned long long)ctx->watchdog_count);
+        for (uint32_t i = 0; i < 32; i++) {
+            uint32_t pos = (ctx->pc_trail_idx + i) & 31;
+            fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
+        }
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
+        return RspExitReason::Watchdog;
+    }
     // srl         $21, $25, 16
     r21 = S32(U32(r25) >> 16);
     // vxor        $v16, $v16, $v16
@@ -963,6 +1110,19 @@ L_12DC:
         r2 = RSP_ADD32(r20, 0X0);
         goto L_138C;
     }
+L_1384:
+    ctx->pc_trail[ctx->pc_trail_idx & 31] = 0x1384;
+    ctx->pc_trail_idx++;
+    if (++ctx->watchdog_count > 100000000ULL) {
+        fprintf(stderr, "[rsp watchdog] hung at PC 0x1384 after %llu transitions; PC trail (oldest..newest):\n", (unsigned long long)ctx->watchdog_count);
+        for (uint32_t i = 0; i < 32; i++) {
+            uint32_t pos = (ctx->pc_trail_idx + i) & 31;
+            fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
+        }
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
+        return RspExitReason::Watchdog;
+    }
     // addi        $2, $20, 0x0
     r2 = RSP_ADD32(r20, 0X0);
     // lw          $2, 0xE($zero)
@@ -976,7 +1136,8 @@ L_138C:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // mfc0        $13, SP_SEMAPHORE
@@ -990,7 +1151,8 @@ L_1390:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $13, $zero, L_1390
@@ -1012,7 +1174,8 @@ L_139C:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $13, $zero, L_139C
@@ -1052,7 +1215,8 @@ L_13CC:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $5, $zero, L_13CC
@@ -1079,7 +1243,8 @@ L_13E0:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // addi        $19, $zero, 0x20
@@ -1177,7 +1342,8 @@ L_1484:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // lrv         $v14[0], 0x20($16)
@@ -1195,7 +1361,8 @@ L_1490:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // addi        $22, $22, 0x9
@@ -1237,7 +1404,8 @@ L_14C4:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // sll         $14, $14, 5
@@ -1373,7 +1541,8 @@ L_15B4:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // addi        $1, $1, -0x20
@@ -1394,7 +1563,8 @@ L_15C0:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // addi        $30, $30, -0x8
@@ -1410,7 +1580,8 @@ L_15C8:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $5, $zero, L_15C8
@@ -1450,7 +1621,8 @@ L_15F0:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // lqv         $v28[0], 0x10($20)
@@ -1514,7 +1686,8 @@ L_1650:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $19, $zero, L_1650
@@ -1536,7 +1709,8 @@ L_165C:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $19, $zero, L_165C
@@ -1592,7 +1766,8 @@ L_16AC:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $5, $zero, L_16AC
@@ -1619,7 +1794,8 @@ L_16C0:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // addi        $20, $20, -0x2
@@ -1663,7 +1839,8 @@ L_1700:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // vmudh       $v20, $v28, $v30[7]
@@ -1724,7 +1901,8 @@ L_1754:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // addi        $30, $30, -0x8
@@ -1740,7 +1918,8 @@ L_175C:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $5, $zero, L_175C
@@ -1772,7 +1951,8 @@ L_177C:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // addi        $3, $zero, 0xF
@@ -1798,7 +1978,8 @@ L_1790:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $4, $zero, L_1790
@@ -1820,7 +2001,8 @@ L_179C:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $4, $zero, L_179C
@@ -1858,7 +2040,8 @@ L_17C8:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $5, $zero, L_17C8
@@ -1887,7 +2070,8 @@ L_17E0:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // srl         $20, $25, 2
@@ -1896,6 +2080,19 @@ L_17E0:
     r20 = r20 & 0XFFF;
     // addi        $20, $20, 0x4E8
     r20 = RSP_ADD32(r20, 0X4E8);
+L_17EC:
+    ctx->pc_trail[ctx->pc_trail_idx & 31] = 0x17EC;
+    ctx->pc_trail_idx++;
+    if (++ctx->watchdog_count > 100000000ULL) {
+        fprintf(stderr, "[rsp watchdog] hung at PC 0x17EC after %llu transitions; PC trail (oldest..newest):\n", (unsigned long long)ctx->watchdog_count);
+        for (uint32_t i = 0; i < 32; i++) {
+            uint32_t pos = (ctx->pc_trail_idx + i) & 31;
+            fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
+        }
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
+        return RspExitReason::Watchdog;
+    }
     // lqv         $v31[0], 0x40($zero)
     rsp.LQV<0>(rsp.vpu.r[31], 0, 0X4);
     // vxor        $v19, $v19, $v19
@@ -1971,7 +2168,8 @@ L_1868:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // ssv         $v24[7], 0x8($24)
@@ -1993,7 +2191,8 @@ L_187C:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // lh          $21, 0xFB0($zero)
@@ -2101,7 +2300,8 @@ L_193C:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // vmulf       $v8, $v13, $v12
@@ -2183,7 +2383,8 @@ L_19BC:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // ldv         $v19[0], 0x0($21)
@@ -2206,7 +2407,8 @@ L_19CC:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // addi        $30, $30, -0x8
@@ -2222,7 +2424,8 @@ L_19D4:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $5, $zero, L_19D4
@@ -2279,7 +2482,8 @@ L_1A18:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // mfc0        $5, SP_DMA_BUSY
@@ -2293,7 +2497,8 @@ L_1A1C:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $5, $zero, L_1A1C
@@ -2322,7 +2527,8 @@ L_1A38:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // lqv         $v24[0], 0x40($24)
@@ -2351,6 +2557,19 @@ L_1A38:
     rsp.MFC2<2>(r23, rsp.vpu.r[24]);
     // addi        $3, $zero, 0x4F
     r3 = RSP_ADD32(0, 0X4F);
+L_1A64:
+    ctx->pc_trail[ctx->pc_trail_idx & 31] = 0x1A64;
+    ctx->pc_trail_idx++;
+    if (++ctx->watchdog_count > 100000000ULL) {
+        fprintf(stderr, "[rsp watchdog] hung at PC 0x1A64 after %llu transitions; PC trail (oldest..newest):\n", (unsigned long long)ctx->watchdog_count);
+        for (uint32_t i = 0; i < 32; i++) {
+            uint32_t pos = (ctx->pc_trail_idx + i) & 31;
+            fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
+        }
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
+        return RspExitReason::Watchdog;
+    }
     // vxor        $v20, $v20, $v20
     rsp.VXOR<0>(rsp.vpu.r[20], rsp.vpu.r[20], rsp.vpu.r[20]);
     // lsv         $v20[14], 0x50($24)
@@ -2400,7 +2619,8 @@ L_1AA8:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // vlt         $v20, $v20, $v24[0]
@@ -2444,7 +2664,8 @@ L_1ADC:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // vlt         $v18, $v18, $v24[3]
@@ -2494,7 +2715,8 @@ L_1B28:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // vaddc       $v21, $v21, $v24[2]
@@ -2508,7 +2730,8 @@ L_1B2C:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // vadd        $v20, $v20, $v24[1]
@@ -2542,7 +2765,8 @@ L_1B4C:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // vlt         $v20, $v20, $v24[0]
@@ -2570,7 +2794,8 @@ L_1B60:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // vlt         $v18, $v18, $v24[3]
@@ -2622,7 +2847,8 @@ L_1BB0:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // vmulf       $v28, $v28, $v10[5]
@@ -2654,7 +2880,8 @@ L_1BD0:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // sqv         $v26[0], 0x0($18)
@@ -2674,7 +2901,8 @@ L_1BDC:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // sqv         $v18[0], 0x20($24)
@@ -2690,7 +2918,8 @@ L_1BE4:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // jal         0x1174
@@ -2709,7 +2938,8 @@ L_1BEC:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // mfc0        $5, SP_DMA_BUSY
@@ -2723,7 +2953,8 @@ L_1BF0:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // bne         $5, $zero, L_1BF0
@@ -2768,7 +2999,8 @@ L_1C28:
             uint32_t pos = (ctx->pc_trail_idx + i) & 31;
             fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
         }
-        fprintf(stderr, "[rsp watchdog] regs: r1=%08X r28=%08X r29=%08X r31=%08X data_ptr-related: r28=%08X data_size: r27=%08X\n", ctx->r1, ctx->r28, ctx->r29, ctx->r31, ctx->r28, ctx->r27);
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
         return RspExitReason::Watchdog;
     }
     // vmulf       $v27, $v28, $v31[5]
@@ -2811,15 +3043,28 @@ do_indirect_jump:
         case 0x1038: goto L_1038;
         case 0x1084: goto L_1084;
         case 0x10C4: goto L_10C4;
+        case 0x119C: goto L_119C;
         case 0x15C0: goto L_15C0;
         case 0x11E4: goto L_11E4;
         case 0x19CC: goto L_19CC;
         case 0x1174: goto L_1174;
         case 0x11B4: goto L_11B4;
         case 0x1754: goto L_1754;
+        case 0x12B0: goto L_12B0;
         case 0x1A18: goto L_1A18;
         case 0x1BEC: goto L_1BEC;
         case 0x10EC: goto L_10EC;
+        case 0x139C: goto L_139C;
+        case 0x127C: goto L_127C;
+        case 0x1A64: goto L_1A64;
+        case 0x11C8: goto L_11C8;
+        case 0x17EC: goto L_17EC;
+        case 0x1248: goto L_1248;
+        case 0x1208: goto L_1208;
+        case 0x1348: goto L_1348;
+        case 0x12D4: goto L_12D4;
+        case 0x1384: goto L_1384;
+        case 0x10A0: goto L_10A0;
     }
     printf("Unhandled jump target 0x%04X in microcode aspMain, coming from [%s:%d]\n", jump_target, debug_file, debug_line);
     printf("Register dump: r0  = %08X r1  = %08X r2  = %08X r3  = %08X r4  = %08X r5  = %08X r6  = %08X r7  = %08X\n"
@@ -2833,5 +3078,13 @@ do_indirect_jump:
 
 RspExitReason aspMain(uint8_t* rdram, [[maybe_unused]] uint32_t ucode_addr) {
     static thread_local RspContext persistent_ctx{};
+    // Pre-task hook: if a runtime registered a hook keyed by
+    // this ucode's name, call it here. Lets game-specific code
+    // replicate parts of rspboot's setup that the static
+    // recompilation can't infer (initial GPRs, DMA-engine
+    // residue, pre-loaded command data in DMEM). Inline
+    // null-check by the std::unordered_map lookup — typical
+    // cost is one branch when no hook is registered.
+    recomp::rsp::run_pre_task_hook(rdram, &persistent_ctx, "aspMain", ucode_addr);
     return aspMain_impl(rdram, &persistent_ctx);
 }

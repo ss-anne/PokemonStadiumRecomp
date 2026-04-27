@@ -57,6 +57,7 @@
 extern "C" void recomp_entrypoint(uint8_t* rdram, recomp_context* ctx);
 
 namespace pokestadium { void register_overlays(); }
+namespace pokestadium::rsp { void register_pre_task_hooks(); }
 
 // RSP microcode entry points provided by RSPRecomp output (Zelda's
 // built aspMain.cpp + njpgdspMain.cpp at F:/Projects/Zelda64Recomp/rsp,
@@ -484,6 +485,16 @@ int main(int argc, char** argv) {
     // at 0x...". Defined in src/main/register_overlays.cpp.
     pokestadium::register_overlays();
     std::fprintf(stderr, "[PSR] overlays registered\n"); std::fflush(stderr);
+
+    // Register RSP pre-task hooks. Stadium's aspMain (the standard
+    // libultra audio ucode, stripped variant at ROM 0x68020) skips
+    // the command-load setup that Zelda's variant does inline; we
+    // replicate rspboot's residue (DMEM[0x2B0] = first chunk, $29 =
+    // 0x2B0, $30 = chunk_size, dma regs harmless) so the dispatch
+    // loop reads real commands instead of dispatch-table residue.
+    // Defined in src/main/rsp_aspmain_hook.cpp.
+    pokestadium::rsp::register_pre_task_hooks();
+    std::fprintf(stderr, "[PSR] rsp pre-task hooks registered\n"); std::fflush(stderr);
 
     // Validate + load the ROM before recomp::start. select_rom verifies
     // the hash matches our registered GameEntry and stashes it as the
