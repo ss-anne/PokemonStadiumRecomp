@@ -36,8 +36,16 @@
 #include <thread>
 
 #include "debug_server.h"
+#include "librecomp/ultra_trace.hpp"
 
 #pragma comment(lib, "ws2_32.lib")
+
+// Function-trace ring queries (definitions in extras.c).
+extern "C" {
+    uint64_t pkmnstadium_trace_write_idx(void);
+    const char* pkmnstadium_trace_at(uint64_t idx);
+    uint32_t pkmnstadium_trace_capacity(void);
+}
 
 namespace pkmnstadium {
 namespace dbg {
@@ -107,6 +115,20 @@ static int get_int(const std::string& body, const char* key, int dflt) {
     size_t colon = body.find(':', k);
     if (colon == std::string::npos) return dflt;
     return std::atoi(body.c_str() + colon + 1);
+}
+
+// Same as get_int but parses an unsigned 32-bit value. atoi
+// overflows on values >= 0x80000000 (e.g. K0/K1 N64 vaddrs); use
+// strtoul to keep the full unsigned range.
+static uint32_t get_uint(const std::string& body, const char* key, uint32_t dflt) {
+    std::string needle = std::string("\"") + key + "\"";
+    size_t k = body.find(needle);
+    if (k == std::string::npos) return dflt;
+    size_t colon = body.find(':', k);
+    if (colon == std::string::npos) return dflt;
+    const char* p = body.c_str() + colon + 1;
+    while (*p == ' ' || *p == '\t') p++;
+    return (uint32_t)std::strtoul(p, nullptr, 0);
 }
 
 static bool get_bool(const std::string& body, const char* key, bool dflt) {
@@ -186,6 +208,172 @@ static std::string handle_command(const std::string& line) {
     if (cmd == "enable_instant_present") {
         g_enable_instant_present_request.store(true);
         return R"({"ok":true})";
+    }
+    if (cmd == "trace_recent") {
+        // Returns the last N entries from the function-trace ring
+        // (TRACE_ENTRY / TRACE_RETURN hits). N defaults to 64; max 512.
+        // Used to diagnose "where is the game looping?" — read it
+        // periodically and the same names should keep cycling.
+        int n = get_int(line, "n", 64);
+        if (n < 1) n = 1;
+        if (n > 512) n = 512;
+        uint64_t widx = pkmnstadium_trace_write_idx();
+        uint32_t cap = pkmnstadium_trace_capacity();
+        if ((uint64_t)n > widx) n = (int)widx;
+        if ((uint32_t)n > cap) n = (int)cap;
+        std::string out = R"({"ok":true,"write_idx":)" + std::to_string(widx) + R"(,"entries":[)";
+        for (int i = 0; i < n; i++) {
+            uint64_t off = widx - n + i;
+            const char* name = pkmnstadium_trace_at(off);
+            if (i) out += ",";
+            out += "\"";
+            out += (name ? name : "?");
+            out += "\"";
+        }
+        out += "]}";
+        return out;
+    }
+    if (cmd == "libultra_recent") {
+        // Returns the last N libultra-call events from the ring in
+        // librecomp. Each event: function name, caller PC ($ra),
+        // a0..a3, ms-since-first-event, monotonic seq.
+        //
+        // Per the global "ring buffer" rule the ring is always-on
+        // (no arming). This command just queries backward over the
+        // window of interest. With cap=4096 and typical call rates
+        // this gives plenty of history relative to LLM tool latency.
+        int n = get_int(line, "n", 64);
+        if (n < 1) n = 1;
+        if (n > 1024) n = 1024;
+        uint64_t widx = recomp_ultra_trace_write_idx();
+        uint32_t cap  = recomp_ultra_trace_capacity();
+        if ((uint64_t)n > widx) n = (int)widx;
+        if ((uint32_t)n > cap)  n = (int)cap;
+
+        std::string out = R"({"ok":true,"write_idx":)" + std::to_string(widx)
+                        + R"(,"events":[)";
+        for (int i = 0; i < n; i++) {
+            uint64_t off = widx - n + i;
+            recomp_ultra_trace_event ev{};
+            int valid = recomp_ultra_trace_get(off, &ev);
+            char buf[320];
+            // Escape name minimally — known to be ASCII C symbols.
+            std::snprintf(buf, sizeof(buf),
+                "%s{\"i\":%llu,\"valid\":%s,\"name\":\"%s\","
+                "\"pc\":%u,\"a0\":%u,\"a1\":%u,\"a2\":%u,\"a3\":%u,"
+                "\"ms\":%llu}",
+                (i ? "," : ""),
+                (unsigned long long)off,
+                valid ? "true" : "false",
+                ev.name,
+                (unsigned)ev.pc,
+                (unsigned)ev.a0,
+                (unsigned)ev.a1,
+                (unsigned)ev.a2,
+                (unsigned)ev.a3,
+                (unsigned long long)ev.ms);
+            out += buf;
+        }
+        out += "]}";
+        return out;
+    }
+    if (cmd == "libultra_boot") {
+        // Returns a slice [start, start+n) from the non-evicting
+        // boot snapshot — the FIRST n events recorded since process
+        // start. Use this to answer "what did each thread do during
+        // boot?" no matter how long the game has been running.
+        //
+        // Args: {"start": <pos>, "n": <count>}
+        //   start: position into the boot buffer (default 0)
+        //   n:     max events to return (default 256, max 1024)
+        //
+        // The "name" field in each event reveals which thread
+        // (audio/scheduler/game) was active by which calls it
+        // makes; the "ms" field gives ordering relative to other
+        // threads.
+        int start = get_int(line, "start", 0);
+        int n     = get_int(line, "n", 256);
+        if (start < 0) start = 0;
+        if (n < 1) n = 1;
+        if (n > 1024) n = 1024;
+        uint32_t total = recomp_ultra_trace_boot_count();
+        uint32_t cap   = recomp_ultra_trace_boot_capacity();
+        std::string out =
+            R"({"ok":true,"count":)" + std::to_string(total) +
+            R"(,"capacity":)" + std::to_string(cap) +
+            R"(,"start":)" + std::to_string(start) +
+            R"(,"events":[)";
+        bool first = true;
+        for (int i = 0; i < n; i++) {
+            uint32_t pos = (uint32_t)start + (uint32_t)i;
+            if (pos >= total) break;
+            recomp_ultra_trace_event ev{};
+            int valid = recomp_ultra_trace_boot_get(pos, &ev);
+            char buf[320];
+            std::snprintf(buf, sizeof(buf),
+                "%s{\"i\":%u,\"valid\":%s,\"name\":\"%s\","
+                "\"pc\":%u,\"a0\":%u,\"a1\":%u,\"a2\":%u,\"a3\":%u,"
+                "\"ms\":%llu}",
+                (first ? "" : ","),
+                pos,
+                valid ? "true" : "false",
+                ev.name,
+                (unsigned)ev.pc,
+                (unsigned)ev.a0,
+                (unsigned)ev.a1,
+                (unsigned)ev.a2,
+                (unsigned)ev.a3,
+                (unsigned long long)ev.ms);
+            out += buf;
+            first = false;
+        }
+        out += "]}";
+        return out;
+    }
+    if (cmd == "rdram_peek") {
+        // Read N bytes from rdram at a virtual address. Generic
+        // diagnostic — useful for inspecting any global state in
+        // the recompiled game (struct fields, flags, queue
+        // counts, etc.) without needing to add a per-field TCP
+        // command for each.
+        //
+        // Args: {"addr": <vaddr>, "n": <count>}
+        //   addr: K0/K1 vaddr (0x80000000+ or 0xA0000000+)
+        //         physical addr also accepted (interpreted as KSEG0).
+        //   n:    bytes to read, 1..256.
+        //
+        // Returns hex string (big-endian byte order from N64's
+        // perspective — we XOR-3 the rdram index per the
+        // recompiler's swap convention).
+        uint32_t addr = get_uint(line, "addr", 0);
+        int n = get_int(line, "n", 4);
+        if (n < 1) n = 1;
+        if (n > 256) n = 256;
+
+        // Mask off K0/K1 segment bits, then bounds-check.
+        uint32_t paddr = addr & 0x1FFFFFFFu;
+        constexpr uint32_t kRdramSize = 8u * 1024u * 1024u;
+        if (paddr + (uint32_t)n > kRdramSize) {
+            return R"({"ok":false,"error":"oob"})";
+        }
+        // The recompiler uses XOR-3 byte addressing (big-endian
+        // word view of little-endian native rdram). Replicate
+        // that here to match what the game sees.
+        uint8_t* rdram = recomp_runtime_get_rdram();
+        if (rdram == nullptr) {
+            return R"({"ok":false,"error":"rdram not yet captured"})";
+        }
+        std::string hex;
+        hex.reserve((size_t)n * 2 + 4);
+        char tmp[4];
+        for (int i = 0; i < n; i++) {
+            uint8_t b = rdram[(paddr + (uint32_t)i) ^ 3];
+            std::snprintf(tmp, sizeof(tmp), "%02x", b);
+            hex += tmp;
+        }
+        return R"({"ok":true,"addr":)" + std::to_string(addr) +
+               R"(,"n":)" + std::to_string(n) +
+               R"(,"hex":")" + hex + R"("})";
     }
     if (cmd == "tail_errlog") {
         FILE* f = fopen("F:/Projects/PokemonStadiumRecomp/build/last_error.log", "rb");

@@ -20,6 +20,8 @@
  */
 
 #include <array>
+#include <chrono>
+#include <thread>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -31,6 +33,7 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#include <dbghelp.h>
 // Avoid Windows.h macro pollution clobbering identifiers in
 // librecomp/ultramodern headers below.
 #undef ERROR
@@ -52,6 +55,8 @@
 #include "debug_server.h"
 
 extern "C" void recomp_entrypoint(uint8_t* rdram, recomp_context* ctx);
+
+namespace pokestadium { void register_overlays(); }
 
 // RSP microcode entry points provided by RSPRecomp output (Zelda's
 // built aspMain.cpp + njpgdspMain.cpp at F:/Projects/Zelda64Recomp/rsp,
@@ -199,11 +204,14 @@ static void reset_audio(uint32_t output_freq) {
 static SDL_Window* g_window = nullptr;
 
 static ultramodern::gfx_callbacks_t::gfx_data_t create_gfx() {
+    fprintf(stderr, "[PSR] create_gfx: SDL_InitSubSystem(VIDEO)\n"); fflush(stderr);
     SDL_InitSubSystem(SDL_INIT_VIDEO);
+    fprintf(stderr, "[PSR] create_gfx: done\n"); fflush(stderr);
     return {};
 }
 
 static ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callbacks_t::gfx_data_t) {
+    fprintf(stderr, "[PSR] create_window: SDL_CreateWindow\n"); fflush(stderr);
     g_window = SDL_CreateWindow(
         "Pokemon Stadium (PokemonStadiumRecomp)",
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
@@ -214,6 +222,7 @@ static ultramodern::renderer::WindowHandle create_window(ultramodern::gfx_callba
         fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
         std::exit(EXIT_FAILURE);
     }
+    fprintf(stderr, "[PSR] create_window: ShowWindow\n"); fflush(stderr);
     SDL_ShowWindow(g_window);
 
     SDL_SysWMinfo wmInfo;
@@ -325,6 +334,73 @@ static ultramodern::input::connected_device_info_t get_connected_device_info(int
     return info;
 }
 
+// ---- Crash diagnostics ----------------------------------------------------
+
+#ifdef _WIN32
+extern "C" const char* pkmnstadium_trace_at(uint64_t idx);
+extern "C" uint64_t pkmnstadium_trace_write_idx(void);
+extern "C" uint32_t pkmnstadium_trace_capacity(void);
+
+static LONG WINAPI psr_crash_filter(EXCEPTION_POINTERS* info) {
+    FILE* f = fopen("F:/Projects/PokemonStadiumRecomp/build/last_error.log", "a");
+    if (f) {
+        fprintf(f, "\n=== UNHANDLED EXCEPTION ===\n");
+        fprintf(f, "  code:    0x%08lX\n", info->ExceptionRecord->ExceptionCode);
+        fprintf(f, "  address: %p\n",      info->ExceptionRecord->ExceptionAddress);
+        // Stack walk + symbol resolution so we know which function crashed.
+        HANDLE proc = GetCurrentProcess();
+        SymInitialize(proc, NULL, TRUE);
+        CONTEXT* ctx = info->ContextRecord;
+        STACKFRAME64 frame{};
+        DWORD machine = IMAGE_FILE_MACHINE_AMD64;
+        frame.AddrPC.Offset = ctx->Rip; frame.AddrPC.Mode = AddrModeFlat;
+        frame.AddrFrame.Offset = ctx->Rbp; frame.AddrFrame.Mode = AddrModeFlat;
+        frame.AddrStack.Offset = ctx->Rsp; frame.AddrStack.Mode = AddrModeFlat;
+        char symbuf[sizeof(SYMBOL_INFO) + 256];
+        SYMBOL_INFO* sym = (SYMBOL_INFO*)symbuf;
+        sym->SizeOfStruct = sizeof(SYMBOL_INFO);
+        sym->MaxNameLen = 255;
+        IMAGEHLP_LINE64 line{}; line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+        for (int i = 0; i < 20; i++) {
+            if (!StackWalk64(machine, proc, GetCurrentThread(), &frame, ctx, NULL,
+                             SymFunctionTableAccess64, SymGetModuleBase64, NULL)) break;
+            if (!frame.AddrPC.Offset) break;
+            DWORD64 disp64 = 0;
+            DWORD disp32 = 0;
+            const char* name = "?";
+            if (SymFromAddr(proc, frame.AddrPC.Offset, &disp64, sym)) name = sym->Name;
+            const char* file = "?"; DWORD lineno = 0;
+            if (SymGetLineFromAddr64(proc, frame.AddrPC.Offset, &disp32, &line)) {
+                file = line.FileName; lineno = line.LineNumber;
+            }
+            fprintf(f, "  #%02d 0x%016llX %s (%s:%lu)\n",
+                i, (unsigned long long)frame.AddrPC.Offset, name, file, lineno);
+        }
+        if (info->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION
+            && info->ExceptionRecord->NumberParameters >= 2) {
+            fprintf(f, "  access:  %s @ 0x%p\n",
+                info->ExceptionRecord->ExceptionInformation[0] == 0 ? "read" :
+                info->ExceptionRecord->ExceptionInformation[0] == 1 ? "write" : "execute",
+                (void*)info->ExceptionRecord->ExceptionInformation[1]);
+        }
+        // Dump last 32 trace ring entries — what the game thread was
+        // executing right before the crash. Critical for diagnosis.
+        uint64_t cap = (uint64_t)pkmnstadium_trace_capacity();
+        uint64_t widx = pkmnstadium_trace_write_idx();
+        fprintf(f, "  trace ring (write_idx=%llu, capacity=%llu):\n",
+            (unsigned long long)widx, (unsigned long long)cap);
+        uint64_t n = (widx < 32) ? widx : 32;
+        for (uint64_t i = 0; i < n; i++) {
+            uint64_t slot = (widx - n + i) % cap;
+            const char* name = pkmnstadium_trace_at(slot);
+            fprintf(f, "    %4llu: %s\n", (unsigned long long)slot, name ? name : "(null)");
+        }
+        fclose(f);
+    }
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+#endif
+
 // ---- Error handling -------------------------------------------------------
 
 static void error_message_box(const char* msg) {
@@ -361,6 +437,14 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "[PSR] main() entered\n"); std::fflush(stderr);
 
 #ifdef _WIN32
+    // Catch unhandled SEH exceptions from any thread (incl. game thread)
+    // so silent crashes get diagnosed. Disable the Win32 error dialog
+    // so the process exits immediately into our handler.
+    SetUnhandledExceptionFilter(psr_crash_filter);
+    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+#endif
+
+#ifdef _WIN32
     // Force WASAPI for stable sample queueing.
     SDL_setenv("SDL_AUDIODRIVER", "wasapi", true);
 #endif
@@ -381,7 +465,8 @@ int main(int argc, char** argv) {
     recomp::register_config_path(std::filesystem::current_path());
 
     recomp::GameEntry game{};
-    game.rom_hash               = 0xED1378BC12115F71ULL;  // first 8 bytes of MD5
+    game.rom_hash               = 0x6E46EACF8F27011DULL;  // XXH3_64bits of baserom.z64 (US v1.0)
+                                                         // computed by tools/compute_rom_hash.exe
     game.internal_name          = "POKEMON STADIUM";
     game.game_id                = u8"pokestadium.us.1.0";
     game.mod_game_id            = "pokestadium";
@@ -391,7 +476,49 @@ int main(int argc, char** argv) {
     game.entrypoint_address     = get_entrypoint_address();
     game.entrypoint             = recomp_entrypoint;
     recomp::register_game(game);
-    std::fprintf(stderr, "[PSR] game registered, about to recomp::start\n"); std::fflush(stderr);
+    std::fprintf(stderr, "[PSR] game registered\n"); std::fflush(stderr);
+
+    // Feed the generated section/overlay table into librecomp so its
+    // func_map knows about every section beyond patches. Without this,
+    // any LOOKUP_FUNC at runtime fails with "Failed to find function
+    // at 0x...". Defined in src/main/register_overlays.cpp.
+    pokestadium::register_overlays();
+    std::fprintf(stderr, "[PSR] overlays registered\n"); std::fflush(stderr);
+
+    // Validate + load the ROM before recomp::start. select_rom verifies
+    // the hash matches our registered GameEntry and stashes it as the
+    // active ROM so start_game can find it.
+    {
+        std::u8string game_id = game.game_id;
+        std::filesystem::path rom_path = std::filesystem::current_path() / "baserom.z64";
+        // baserom.z64 lives at PROJECT root, not build/. Walk up if needed.
+        if (!std::filesystem::exists(rom_path)) {
+            rom_path = std::filesystem::current_path().parent_path() / "baserom.z64";
+        }
+        std::fprintf(stderr, "[PSR] selecting ROM: %s\n", rom_path.string().c_str()); std::fflush(stderr);
+        auto err = recomp::select_rom(rom_path, game_id);
+        if (err != recomp::RomValidationError::Good) {
+            std::fprintf(stderr, "[PSR] select_rom error: %d\n", (int)err); std::fflush(stderr);
+        } else {
+            std::fprintf(stderr, "[PSR] select_rom OK\n"); std::fflush(stderr);
+        }
+    }
+
+    // Defer start_game until after recomp::start has had a moment to spin
+    // up the VI thread. The VI thread's update_vi() reads next_state->mode
+    // unconditionally, but mode only gets initialized to a real OSViMode
+    // when the game calls osViSetMode (or to a dummy when is_game_started()
+    // is false). If we set game_status to Running BEFORE the VI thread
+    // first ticks, set_dummy_vi never runs and update_vi crashes on a
+    // NULL mode pointer. The game itself races to call osViSetMode in its
+    // very first frames, so we need a small grace window where the dummy
+    // VI mode gets installed first.
+    std::thread([game_id = game.game_id]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        recomp::start_game(game_id);
+        std::fprintf(stderr, "[PSR] start_game fired (deferred 100ms)\n"); std::fflush(stderr);
+    }).detach();
+    std::fprintf(stderr, "[PSR] start_game scheduled, about to recomp::start\n"); std::fflush(stderr);
 
     recomp::rsp::callbacks_t rsp_callbacks{
         .get_rsp_microcode = get_rsp_microcode,

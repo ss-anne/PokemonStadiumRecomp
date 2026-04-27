@@ -6,10 +6,21 @@
 # path it can't handle, fix the engine — never paper over.
 
 [input]
-# Entrypoint: standard N64 boot address (where IPL3 hands off to the game).
-# Pokemon Stadium's text segment starts at vram 0x80000400, with entry
-# at 0x80080000 per pret's segment table for the 'text' segment.
-entrypoint = 0x80080000
+# Entrypoint: per pret's splat yaml, the .text segment is at vram
+# 0x80000400 and the first subsegment is `entry` (asm/us/entry.s,
+# label `entry_point`). entry_point bzero's BSS then `jr`s to Main
+# at 0x80000530. We need entrypoint to match section 5's declared
+# ram_addr so load_overlays maps section 5 onto its real VRAM —
+# otherwise func_map[0x80000530] never gets populated and the jr
+# Main inside the entry asm hits a lookup miss.
+entrypoint = 0x80000400
+
+# Trace mode: emit TRACE_ENTRY()/TRACE_RETURN() at every recompiled
+# function boundary. include/trace.h defines them as a push into a
+# 4096-slot ring exposed via the TCP debug server's trace_recent
+# command. Lets us see exactly which game functions are executing
+# right now — critical for diagnosing where boot is stuck.
+trace_mode = true
 
 # The verified v1.0 ROM. CMake asserts MD5 ed1378bc...
 rom_file_path = "baserom.z64"
@@ -1945,6 +1956,15 @@ section = ".fragment1"
 vram = 0x8120A73C
 size = 0x124
 
+[[input.manual_funcs]]
+# Discovered via runtime "Failed to find function at 0x80000530" —
+# tail-call target inside main(), pret didn't symbolize. Conservative
+# size: ends at next known boundary 0x800005C0 (rsp function start).
+name = "func_80000530"
+section = ".text"
+vram = 0x80000530
+size = 0x90   # 0x800005C0 - 0x80000530
+
 # ── Patches ─────────────────────────────────────────────────────────────────
 # Ignored functions: symbols defined by both the recompiled ELF
 # (pret bundles libultra source) AND librecomp's reimplementations.
@@ -1955,3 +1975,849 @@ size = 0x124
 ignored = [
     "osSetTime",
 ]
+[[input.manual_funcs]]
+# fragment1 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment1_entry"
+section = ".fragment1"
+vram = 0x81200000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment2 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment2_entry"
+section = ".fragment2"
+vram = 0x87800000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment3 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment3_entry"
+section = ".fragment3"
+vram = 0x87900000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment4 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment4_entry"
+section = ".fragment4"
+vram = 0x87A00000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment5 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment5_entry"
+section = ".fragment5"
+vram = 0x87B00000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment6 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment6_entry"
+section = ".fragment6"
+vram = 0x86000000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment7 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment7_entry"
+section = ".fragment7"
+vram = 0x86100000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment8 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment8_entry"
+section = ".fragment8"
+vram = 0x86200000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment9 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment9_entry"
+section = ".fragment9"
+vram = 0x86300000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment10 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment10_entry"
+section = ".fragment10"
+vram = 0x86400000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment11 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment11_entry"
+section = ".fragment11"
+vram = 0x86500000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment12 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment12_entry"
+section = ".fragment12"
+vram = 0x86600000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment13 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment13_entry"
+section = ".fragment13"
+vram = 0x86700000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment14 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment14_entry"
+section = ".fragment14"
+vram = 0x86800000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment15 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment15_entry"
+section = ".fragment15"
+vram = 0x86900000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment16 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment16_entry"
+section = ".fragment16"
+vram = 0x86A00000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment17 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment17_entry"
+section = ".fragment17"
+vram = 0x86B00000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment18 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment18_entry"
+section = ".fragment18"
+vram = 0x86C00000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment19 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment19_entry"
+section = ".fragment19"
+vram = 0x86D00000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment20 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment20_entry"
+section = ".fragment20"
+vram = 0x86E00000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment21 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment21_entry"
+section = ".fragment21"
+vram = 0x86F00000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment22 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment22_entry"
+section = ".fragment22"
+vram = 0x88000000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment23 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment23_entry"
+section = ".fragment23"
+vram = 0x88200000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment24 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment24_entry"
+section = ".fragment24"
+vram = 0x88300000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment25 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment25_entry"
+section = ".fragment25"
+vram = 0x88400000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment26 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment26_entry"
+section = ".fragment26"
+vram = 0x88500000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment27 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment27_entry"
+section = ".fragment27"
+vram = 0x88600000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment28 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment28_entry"
+section = ".fragment28"
+vram = 0x88800000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment29 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment29_entry"
+section = ".fragment29"
+vram = 0x88900000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment30 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment30_entry"
+section = ".fragment30"
+vram = 0x88A00000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment31 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment31_entry"
+section = ".fragment31"
+vram = 0x81000000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment32 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment32_entry"
+section = ".fragment32"
+vram = 0x81100000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment33 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment33_entry"
+section = ".fragment33"
+vram = 0x81300000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment34 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment34_entry"
+section = ".fragment34"
+vram = 0x81400000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment35 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment35_entry"
+section = ".fragment35"
+vram = 0x82000000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment36 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment36_entry"
+section = ".fragment36"
+vram = 0x82100000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment37 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment37_entry"
+section = ".fragment37"
+vram = 0x82200000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment38 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment38_entry"
+section = ".fragment38"
+vram = 0x82300000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment39 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment39_entry"
+section = ".fragment39"
+vram = 0x82500000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment40 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment40_entry"
+section = ".fragment40"
+vram = 0x83100000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment41 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment41_entry"
+section = ".fragment41"
+vram = 0x82F00000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment42 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment42_entry"
+section = ".fragment42"
+vram = 0x83300000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment43 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment43_entry"
+section = ".fragment43"
+vram = 0x83400000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment44 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment44_entry"
+section = ".fragment44"
+vram = 0x83500000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment45 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment45_entry"
+section = ".fragment45"
+vram = 0x83600000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment46 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment46_entry"
+section = ".fragment46"
+vram = 0x83700000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment47 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment47_entry"
+section = ".fragment47"
+vram = 0x83800000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment48 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment48_entry"
+section = ".fragment48"
+vram = 0x83900000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment49 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment49_entry"
+section = ".fragment49"
+vram = 0x83A00000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment50 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment50_entry"
+section = ".fragment50"
+vram = 0x82600000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment51 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment51_entry"
+section = ".fragment51"
+vram = 0x82800000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment52 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment52_entry"
+section = ".fragment52"
+vram = 0x82800000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment53 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment53_entry"
+section = ".fragment53"
+vram = 0x82A00000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment54 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment54_entry"
+section = ".fragment54"
+vram = 0x82B00000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment55 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment55_entry"
+section = ".fragment55"
+vram = 0x83000000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment56 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment56_entry"
+section = ".fragment56"
+vram = 0x82C00000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment57 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment57_entry"
+section = ".fragment57"
+vram = 0x82D00000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment58 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment58_entry"
+section = ".fragment58"
+vram = 0x84000000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment59 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment59_entry"
+section = ".fragment59"
+vram = 0x84100000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment60 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment60_entry"
+section = ".fragment60"
+vram = 0x82E00000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment61 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment61_entry"
+section = ".fragment61"
+vram = 0x84200000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment62 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment62_entry"
+section = ".fragment62"
+vram = 0x84300000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment63 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment63_entry"
+section = ".fragment63"
+vram = 0x84B00000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment64 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment64_entry"
+section = ".fragment64"
+vram = 0x84800000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment65 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment65_entry"
+section = ".fragment65"
+vram = 0x84A00000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment66 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment66_entry"
+section = ".fragment66"
+vram = 0x83200000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment67 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment67_entry"
+section = ".fragment67"
+vram = 0x8F000000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment68 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment68_entry"
+section = ".fragment68"
+vram = 0x8F100000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment69 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment69_entry"
+section = ".fragment69"
+vram = 0x8F200000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment70 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment70_entry"
+section = ".fragment70"
+vram = 0x8F300000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment71 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment71_entry"
+section = ".fragment71"
+vram = 0x8F400000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment72 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment72_entry"
+section = ".fragment72"
+vram = 0x8F500000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment73 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment73_entry"
+section = ".fragment73"
+vram = 0x8F600000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment74 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment74_entry"
+section = ".fragment74"
+vram = 0x8F700000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment75 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment75_entry"
+section = ".fragment75"
+vram = 0x8FA00000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment76 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment76_entry"
+section = ".fragment76"
+vram = 0x8FB00000
+size = 0x8
+
+[[input.manual_funcs]]
+# fragment77 header trampoline (j + delay slot at offset 0). The
+# textbin header isn't disassembled by N64Recomp, so we declare it
+# manually as an 8-byte function. The J instruction at offset 0 jumps
+# to the fragment's real entry which the recompiler resolves
+# statically.
+name = "fragment77_entry"
+section = ".fragment77"
+vram = 0x8FC00000
+size = 0x8

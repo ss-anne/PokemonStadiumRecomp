@@ -61,12 +61,13 @@ add_executable(PokemonStadiumRecomp
     src/main/main.cpp
     src/main/rt64_render_context.cpp
     src/main/debug_server.cpp
+    src/main/register_overlays.cpp
     extras.c
     # Generated lookup table (provides get_entrypoint_address etc).
     generated/lookup.cpp
-    # Borrow Zelda64Recomp's RSP recompiled outputs (standard libultra
-    # audio + JPEG microcodes; same versions used by Pokemon Stadium-era games).
-    ${CMAKE_SOURCE_DIR}/../Zelda64Recomp/rsp/aspMain.cpp
+    # Pokemon Stadium's own aspMain (recompiled from baserom @ 0x68020, 0xC60 bytes).
+    ${CMAKE_SOURCE_DIR}/rsp/aspMain.cpp
+    # njpgdspMain is the standard libultra JPEG ucode — borrow Zelda's recompiled output.
     ${CMAKE_SOURCE_DIR}/../Zelda64Recomp/rsp/njpgdspMain.cpp
 )
 
@@ -91,8 +92,22 @@ target_compile_options(PokemonStadiumRecomp PRIVATE
     -march=nehalem  # Required by RT64's RSP simulator (SSSE3, SSE4.1, SSE4.2)
 )
 
+# Emit PDBs in Release for the runner + librecomp/ultramodern so the SEH
+# crash filter's stack walk produces real symbol names. clang-cl needs
+# /Z7 (embed CodeView in objects) on the compiler side and /DEBUG on the
+# linker side; /OPT:REF + /OPT:NOICF keep dead-code stripping but stop
+# IDENTICAL COMDAT folding from collapsing different functions to the
+# same address (which would corrupt the stack-walk symbol mapping).
 if (MSVC)
-    target_link_options(PokemonStadiumRecomp PRIVATE /OPT:NOICF)
+    target_compile_options(PokemonStadiumRecomp PRIVATE /Z7)
+    target_compile_options(RecompiledFuncs       PRIVATE /Z7)
+    target_link_options(PokemonStadiumRecomp PRIVATE /DEBUG /OPT:REF /OPT:NOICF)
+    if (TARGET librecomp)
+        target_compile_options(librecomp PRIVATE /Z7)
+    endif()
+    if (TARGET ultramodern)
+        target_compile_options(ultramodern PRIVATE /Z7)
+    endif()
 endif()
 
 # ---- SDL2 (fetched on Windows; standard system package on Linux/Mac) -------
@@ -119,7 +134,7 @@ if (WIN32)
             $<TARGET_FILE_DIR:PokemonStadiumRecomp>
     )
 
-    target_link_libraries(PokemonStadiumRecomp PRIVATE SDL2 SDL2main Winmm.lib)
+    target_link_libraries(PokemonStadiumRecomp PRIVATE SDL2 SDL2main Winmm.lib dbghelp.lib)
 endif()
 
 target_link_libraries(PokemonStadiumRecomp PRIVATE

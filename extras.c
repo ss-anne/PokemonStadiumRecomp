@@ -122,8 +122,8 @@ void recomp_unhandled_instruction(uint8_t *rdram, recomp_context *ctx,
         abort();                                                               \
     }
 
-UNIMPL_LIBULTRA(osEPiWriteIo)
-UNIMPL_LIBULTRA(osPfsIsPlug)
+// osEPiWriteIo is implemented in librecomp/src/pi.cpp.
+// osPfsIsPlug is implemented in librecomp/src/pak.cpp.
 UNIMPL_LIBULTRA(__osContRamWrite)
 UNIMPL_LIBULTRA(__osContRamRead)
 UNIMPL_LIBULTRA(osLeoDiskInit)
@@ -134,3 +134,41 @@ UNIMPL_LIBULTRA(__osPfsGetStatus)
 UNIMPL_LIBULTRA(__osSetCompare)
 UNIMPL_LIBULTRA(osDpGetCounters)
 UNIMPL_LIBULTRA(rmonPrintf)
+
+/* ------------------------------------------------------------------ */
+/* TRACE_ENTRY / TRACE_RETURN ring (powered by game.toml             */
+/* trace_mode = true). See include/trace.h.                          */
+/* ------------------------------------------------------------------ */
+
+#define TRACE_RING_CAP 4096   /* power of two — wraps cheaply */
+
+static const char* trace_ring[TRACE_RING_CAP];
+static volatile uint64_t trace_ring_write_idx = 0;  /* monotonic */
+
+void pkmnstadium_trace_entry(const char *func) {
+    uint64_t idx = __atomic_fetch_add(&trace_ring_write_idx, 1, __ATOMIC_RELAXED);
+    trace_ring[idx & (TRACE_RING_CAP - 1)] = func;
+}
+
+void pkmnstadium_trace_return(const char *func) {
+    /* For "where are we stuck?" the entry log is what matters; returns
+     * are recorded too in case we need to reconstruct a call stack. */
+    uint64_t idx = __atomic_fetch_add(&trace_ring_write_idx, 1, __ATOMIC_RELAXED);
+    trace_ring[idx & (TRACE_RING_CAP - 1)] = func;  /* same slot semantics */
+}
+
+/* Public queries used by debug_server.cpp. Returning const char* from a
+ * shared ring is racy with concurrent writers, but for diagnostic
+ * sampling we accept the small chance of a partial slot. */
+
+uint64_t pkmnstadium_trace_write_idx(void) {
+    return __atomic_load_n(&trace_ring_write_idx, __ATOMIC_RELAXED);
+}
+
+const char* pkmnstadium_trace_at(uint64_t idx) {
+    return trace_ring[idx & (TRACE_RING_CAP - 1)];
+}
+
+uint32_t pkmnstadium_trace_capacity(void) {
+    return TRACE_RING_CAP;
+}
