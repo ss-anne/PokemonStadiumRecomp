@@ -535,6 +535,19 @@ L_1134:
     // addi        $30, $30, -0x8
     r30 = RSP_ADD32(r30, -0X8);
     goto L_10EC;
+L_1144:
+    ctx->pc_trail[ctx->pc_trail_idx & 31] = 0x1144;
+    ctx->pc_trail_idx++;
+    if (++ctx->watchdog_count > 100000000ULL) {
+        fprintf(stderr, "[rsp watchdog] hung at PC 0x1144 after %llu transitions; PC trail (oldest..newest):\n", (unsigned long long)ctx->watchdog_count);
+        for (uint32_t i = 0; i < 32; i++) {
+            uint32_t pos = (ctx->pc_trail_idx + i) & 31;
+            fprintf(stderr, "  [%2u] PC=0x%04X\n", i, ctx->pc_trail[pos]);
+        }
+        fprintf(stderr, "[rsp watchdog] gprs: r1=%08X r2=%08X r3=%08X r25=%08X r26=%08X r27=%08X r28=%08X r29=%08X r30=%08X r31=%08X jt=%08X dma_mem=%08X dma_dram=%08X\n",
+            ctx->r1, ctx->r2, ctx->r3, ctx->r25, ctx->r26, ctx->r27, ctx->r28, ctx->r29, ctx->r30, ctx->r31, ctx->jump_target, ctx->dma_mem_address, ctx->dma_dram_address);
+        return RspExitReason::Watchdog;
+    }
     // addi        $30, $30, -0x8
     r30 = RSP_ADD32(r30, -0X8);
     // sll         $3, $26, 8
@@ -3926,6 +3939,7 @@ do_indirect_jump:
         case 0x12D4: goto L_12D4;
         case 0x1384: goto L_1384;
         case 0x10A0: goto L_10A0;
+        case 0x1144: goto L_1144;
     }
     printf("Unhandled jump target 0x%04X in microcode aspMain, coming from [%s:%d]\n", jump_target, debug_file, debug_line);
     printf("Register dump: r0  = %08X r1  = %08X r2  = %08X r3  = %08X r4  = %08X r5  = %08X r6  = %08X r7  = %08X\n"

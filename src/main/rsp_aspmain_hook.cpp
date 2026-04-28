@@ -142,40 +142,36 @@ void aspmain_pre_task(uint8_t* rdram,
     ctx->r27 = data_size - chunk;
     ctx->r28 = data_ptr + chunk;
 
-    // Seed the DMA-engine residue. The boot path's first DMA at
-    // L_1120 → L_10EC fires WITHOUT having gone through the
-    // mtc0 r1, SP_MEM_ADDR / mtc0 r2, SP_DRAM_ADDR sequence at
-    // PC 0x10E4/0x10E8. So it uses whatever dma_mem_address /
-    // dma_dram_address / r3 we leave here.
+    // Seed DMA-engine residue + r3 + r31 to match what real rspboot
+    // leaves behind, per Ares oracle measurement at first L_10EC of
+    // a Stadium audio task (queried via tools/diff_aspmain.py +
+    // ares_oracle_server's boot snapshot):
     //
-    // Setting them to a self-rereferencing no-op (read 1 byte of
-    // ucode_data back into DMEM[0xFA0]) keeps the operation
-    // harmless. The byte at ucode_data[0] is the first byte of
-    // the dispatch table = 0x10, written into DMEM scratch.
-    // Seed DMA-engine residue to match what real rspboot leaves
-    // behind. rspboot's last DMA was the ucode_data load, so it
-    // leaves:
-    //   SP_MEM_ADDR  = 0           (DMEM dest of the data load)
-    //   SP_DRAM_ADDR = ucode_data  (DRAM source of the data load)
-    //   SP_RD_LEN    = ucode_data_size - 1 = 0xF7F
+    //   dma_mem_address  = 0x2B0  (DMEM of audio command region)
+    //   dma_dram_address = data_ptr + chunk  (next chunk's DRAM addr)
+    //   r3               = chunk - 1 = 0x13F (size-1 of just-loaded chunk)
+    //   r31              = 0x1144  (boot-path return point for L_10EC's jr)
     //
-    // Boot path (L_1120 → L_10EC) and any early handler that fires
-    // a DMA via L_10EC without going through PC 0x10E4/0x10E8 will
-    // reuse these registers. With this seed, such DMAs harmlessly
-    // re-load ucode_data into DMEM[0..0xF7F] — same content already
-    // there, no corruption.
+    // The boot-path L_10EC at PC 0x10EC fires `mtc0 r3, SP_RD_LEN` in
+    // its delay slot; that kicks a DMA of (r3+1) bytes from
+    // SP_DRAM_ADDR to SP_MEM_ADDR. With the values above, that DMA
+    // refills DMEM[0x2B0..0x3EF] with the FIRST already-resident
+    // chunk over itself (no-op effectively) — but importantly, the
+    // post-DMA auto-increment moves SP_MEM_ADDR to 0x3F0 and
+    // SP_DRAM_ADDR forward by 0x140, lining up the NEXT chunk for
+    // the dispatcher's eventual L_106C -> L_1120 -> L_10EC refresh.
     //
-    // ucode_addr is the TEXT address; we need ucode_data, which the
-    // runtime loaded via dma_rdram_to_dmem. Read it from the OSTask
-    // at DMEM[0xFC0+0x18] (struct offset of ucode_data).
-    uint32_t ucode_data_addr = load_w(0xFC0 + 0x18);
-    ctx->dma_mem_address  = 0;
-    ctx->dma_dram_address = ucode_data_addr;
-    // r3 starts as the standard rspboot residue: length-1 of last
-    // DMA (= 0xF7F for the ucode_data load). The dispatched
-    // handler's `r3 -= 1; jal L_1174` then produces a DMA of length
-    // = old_r3, which on first call re-loads ucode_data harmlessly.
-    ctx->r3 = 0xF7F;
+    // r31 = 0x1144 is the address of the instruction immediately
+    // after `j 0x10EC`'s delay slot at PC 0x1140 inside L_1120. After
+    // L_10EC's `jr r31`, control resumes at 0x1144 to continue the
+    // boot setup (which leads into the dispatch loop via L_106C's
+    // bgtz r30 path). Without this, jr r31 returns to whatever the
+    // last jal set (0x1038 — the dispatch loop start), which causes
+    // the dispatcher to re-enter L_10EC every iteration.
+    ctx->dma_mem_address  = kAudioCommandsDmemOffset;
+    ctx->dma_dram_address = data_ptr + chunk;
+    ctx->r3               = chunk - 1;
+    ctx->r31              = 0x1144;
 
     // Inform diagnostic ring that the hook ran. Quiet; not an
     // error path. Helpful if a future regression makes us doubt

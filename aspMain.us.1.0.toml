@@ -42,4 +42,14 @@ extra_indirect_branch_targets = [
     # indirectly we want the recompiler to handle the branch
     # correctly.
     0x10A0,
+    # Boot-path return point for L_10EC's `jr $ra` during the very
+    # first L_1120 -> j L_10EC handoff. rspboot leaves r31 = 0x1144
+    # on real hardware (verified via Ares oracle: at the first L_10EC
+    # entry in the boot trace, r31 = 0x144 (== 0x1144 unmasked)).
+    # Without this label the recompiler's do_indirect_jump switch
+    # has no case for 0x1144 and falls through to UnhandledJumpTarget.
+    # PC 0x1144 sits inside an existing straight-line block; adding
+    # it as a target forces the recompiler to split the block so
+    # control can re-enter mid-stream.
+    0x1144,
 ]
