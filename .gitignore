@@ -12,11 +12,11 @@ build-*/
 # Generated recompiler output (regen via N64Recomp)
 generated/
 
-# Ghidra project state
-ghidra/*.lock
-ghidra/*.lock~
-ghidra/*.gpr.bak
-ghidra/projects/
+# Ghidra project state (live DBs are machine-specific, large)
+ghidra/**/*.lock
+ghidra/**/*.lock~
+ghidra/**/*.gpr.bak
+ghidra/**/projects/
 
 # Ares emulator build artifacts (submoduled at ares-emulator/)
 ares-emulator/
