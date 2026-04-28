@@ -17,6 +17,14 @@ ghidra/*.lock
 ghidra/*.lock~
 ghidra/*.gpr.bak
 ghidra/projects/
+# Ghidra volatile DB / temp state — held open while Ghidra is running,
+# changes constantly, and breaks `git checkout` on Windows because the
+# OS won't unlink files Ghidra has open.
+ghidra/**/~*.db/
+ghidra/**/~index.bak
+ghidra/**/~index.dat
+ghidra/**/~journal.bak
+ghidra/**/tmp*.ps
 
 # Ares emulator build artifacts (submoduled at ares-emulator/)
 ares-emulator/
