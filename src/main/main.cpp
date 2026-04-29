@@ -257,16 +257,31 @@ static void update_gfx(void*) {
 
 static SDL_GameController* g_pad = nullptr;
 
-static void poll_inputs() {
-    SDL_GameControllerUpdate();
-    if (!g_pad) {
-        for (int i = 0; i < SDL_NumJoysticks(); i++) {
-            if (SDL_IsGameController(i)) {
-                g_pad = SDL_GameControllerOpen(i);
-                if (g_pad) break;
+// Lazy-detect/open the first SDL gamepad. Safe to call from any of the
+// input callbacks — both poll_inputs and get_connected_device_info
+// invoke this so the device status is correct even when osContInit
+// queries before the first poll cycle.
+static void ensure_pad_open() {
+    if (g_pad) return;
+    int njoy = SDL_NumJoysticks();
+    for (int i = 0; i < njoy; i++) {
+        if (SDL_IsGameController(i)) {
+            g_pad = SDL_GameControllerOpen(i);
+            if (g_pad) {
+                const char* ctrl_name = SDL_GameControllerName(g_pad);
+                fprintf(stderr,
+                    "[input] OPENED controller: name='%s'\n",
+                    ctrl_name ? ctrl_name : "(null)");
+                fflush(stderr);
+                return;
             }
         }
     }
+}
+
+static void poll_inputs() {
+    SDL_GameControllerUpdate();
+    ensure_pad_open();
 }
 
 static bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, float* y_out) {
@@ -329,6 +344,13 @@ static void set_rumble(int controller_num, bool on) {
 }
 
 static ultramodern::input::connected_device_info_t get_connected_device_info(int controller_num) {
+    // libultra's osContInit() calls this BEFORE the first poll cycle,
+    // so we have to lazy-detect the SDL pad here too. Without this,
+    // Stadium's title screen reports "Controller 1 not connected"
+    // even when an Xbox/etc. pad is plugged in.
+    if (controller_num == 0) {
+        ensure_pad_open();
+    }
     ultramodern::input::connected_device_info_t info{};
     info.connected_device = (controller_num == 0 && g_pad)
         ? ultramodern::input::Device::Controller
