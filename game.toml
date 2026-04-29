@@ -2905,3 +2905,16 @@ text = "pkmnstadium_lookup_enter(ctx->r4);"
 func = "func_80019D18"
 before_vram = 0x80019D84  # right after `lw $v0, 0x24($sp)` — v0 is set
 text = "pkmnstadium_lookup_exit(ctx->r2);"
+
+# func_80003DC4 = PERS-SZP wrapper validator/loader. Logs every call's
+# (rom_start, rom_end) → return value. Lets us see which entries
+# actually load valid data and which return 0.
+[[patches.hook]]
+func = "func_80003DC4"
+before_vram = 0x80003DC4   # entry instr (addiu $sp,$sp,-0x38)
+text = "pkmnstadium_pers_enter(ctx->r4, ctx->r5);"
+
+[[patches.hook]]
+func = "func_80003DC4"
+before_vram = 0x80003F4C   # right after `lw $v0, 0x2C($sp)` — v0 is set
+text = "pkmnstadium_pers_exit(rdram, ctx->r2);"

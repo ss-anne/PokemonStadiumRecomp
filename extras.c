@@ -236,6 +236,47 @@ void pkmnstadium_lookup_exit(uint32_t v0) {
     }
 }
 
+/* func_80003DC4(rom_start, rom_end, 0, 0) — the PERS-SZP wrapper
+ * loader. Logs every call's args + first 8 bytes of the destination
+ * (the wrapper magic) so we can correlate which entries actually
+ * land valid data and which return NULL. */
+static __thread uint32_t s_pers_a0_stack[16];
+static __thread uint32_t s_pers_a1_stack[16];
+static __thread int s_pers_sp = 0;
+
+void pkmnstadium_pers_enter(uint32_t a0, uint32_t a1) {
+    if (s_pers_sp < 16) {
+        s_pers_a0_stack[s_pers_sp] = a0;
+        s_pers_a1_stack[s_pers_sp] = a1;
+    }
+    s_pers_sp++;
+}
+
+void pkmnstadium_pers_exit(uint8_t* rdram, uint32_t v0) {
+    s_pers_sp--;
+    if (s_pers_sp < 0 || s_pers_sp >= 16) return;
+    uint32_t a0 = s_pers_a0_stack[s_pers_sp];
+    uint32_t a1 = s_pers_a1_stack[s_pers_sp];
+    /* If a destination buffer was allocated and validated, v0 is the
+     * descriptor pointer (kseg0). Read the descriptor's first 8 bytes
+     * — should be "PERS-SZP" or "PRES-???" if validation passed. If
+     * v0 is 0, the function returned failure. */
+    char magic[9] = {0};
+    if (v0 != 0) {
+        uint32_t paddr = v0 & 0x1FFFFFFFu;
+        if (paddr + 8 <= 1024u * 1024u * 1024u) {
+            for (int i = 0; i < 8; i++) {
+                uint8_t b = rdram[(paddr + i) ^ 3];
+                magic[i] = (b >= 0x20 && b < 0x7F) ? (char)b : '.';
+            }
+        }
+    }
+    fprintf(stderr,
+        "[pers] func_80003DC4(rom=0x%08X..0x%08X) -> 0x%08X magic='%s'\n",
+        a0, a1, v0, magic);
+    fflush(stderr);
+}
+
 void pkmnstadium_trace_return(const char *func) {
     /* For "where are we stuck?" the entry log is what matters; returns
      * are recorded too in case we need to reconstruct a call stack. */
