@@ -271,6 +271,15 @@ static SDL_GameController* g_pad = nullptr;
 // queries before the first poll cycle.
 static void ensure_pad_open() {
     if (g_pad) return;
+    // SDL only sees newly-attached pads after the event subsystem has
+    // pumped at least once. get_connected_device_info() is called by
+    // libultra's osContInit BEFORE the runner enters its frame loop
+    // (which is what would normally call SDL_GameControllerUpdate),
+    // so without an explicit pump SDL_NumJoysticks returns 0 and the
+    // game reports "Controller 1 not connected" even with a pad
+    // plugged in.
+    SDL_PumpEvents();
+    SDL_GameControllerUpdate();
     int njoy = SDL_NumJoysticks();
     for (int i = 0; i < njoy; i++) {
         if (SDL_IsGameController(i)) {
@@ -306,7 +315,7 @@ static bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_ou
         return true;
     }
 
-    if (controller_num != 0 || !g_pad) return false;
+    if (controller_num != 0) return false;
 
     // Diagnostic input log: when buttons change, print what we're
     // about to deliver. Lets us diff "what the user pressed" vs
@@ -315,39 +324,94 @@ static bool get_n64_input(int controller_num, uint16_t* buttons_out, float* x_ou
     // because we accidentally OR'd in another bit).
     static uint16_t s_last_buttons = 0;
 
-    auto pressed = [&](SDL_GameControllerButton b) {
-        return SDL_GameControllerGetButton(g_pad, b) ? 1 : 0;
-    };
-
-    // N64 button bit layout (libultra contStat):
-    //   0x8000 A         0x4000 B         0x2000 Z         0x1000 Start
-    //   0x0800 D-Up      0x0400 D-Down    0x0200 D-Left    0x0100 D-Right
-    //   0x0020 L         0x0010 R
-    //   0x0008 C-Up      0x0004 C-Down    0x0002 C-Left    0x0001 C-Right
     uint16_t b = 0;
-    if (pressed(SDL_CONTROLLER_BUTTON_A))             b |= 0x8000; // A
-    if (pressed(SDL_CONTROLLER_BUTTON_B))             b |= 0x4000; // B
-    if (pressed(SDL_CONTROLLER_BUTTON_LEFTSHOULDER))  b |= 0x2000; // Z
-    if (pressed(SDL_CONTROLLER_BUTTON_START))         b |= 0x1000; // Start
-    if (pressed(SDL_CONTROLLER_BUTTON_DPAD_UP))       b |= 0x0800;
-    if (pressed(SDL_CONTROLLER_BUTTON_DPAD_DOWN))     b |= 0x0400;
-    if (pressed(SDL_CONTROLLER_BUTTON_DPAD_LEFT))     b |= 0x0200;
-    if (pressed(SDL_CONTROLLER_BUTTON_DPAD_RIGHT))    b |= 0x0100;
-    if (pressed(SDL_CONTROLLER_BUTTON_LEFTSTICK))     b |= 0x0020; // L
-    if (pressed(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)) b |= 0x0010; // R
+    int16_t lx = 0, ly = 0, rx = 0, ry = 0;
+
+    if (g_pad) {
+        auto pressed = [&](SDL_GameControllerButton btn) {
+            return SDL_GameControllerGetButton(g_pad, btn) ? 1 : 0;
+        };
+
+        // N64 button bit layout (libultra contStat):
+        //   0x8000 A         0x4000 B         0x2000 Z         0x1000 Start
+        //   0x0800 D-Up      0x0400 D-Down    0x0200 D-Left    0x0100 D-Right
+        //   0x0020 L         0x0010 R
+        //   0x0008 C-Up      0x0004 C-Down    0x0002 C-Left    0x0001 C-Right
+        if (pressed(SDL_CONTROLLER_BUTTON_A))             b |= 0x8000; // A
+        if (pressed(SDL_CONTROLLER_BUTTON_B))             b |= 0x4000; // B
+        if (pressed(SDL_CONTROLLER_BUTTON_LEFTSHOULDER))  b |= 0x2000; // Z
+        if (pressed(SDL_CONTROLLER_BUTTON_START))         b |= 0x1000; // Start
+        if (pressed(SDL_CONTROLLER_BUTTON_DPAD_UP))       b |= 0x0800;
+        if (pressed(SDL_CONTROLLER_BUTTON_DPAD_DOWN))     b |= 0x0400;
+        if (pressed(SDL_CONTROLLER_BUTTON_DPAD_LEFT))     b |= 0x0200;
+        if (pressed(SDL_CONTROLLER_BUTTON_DPAD_RIGHT))    b |= 0x0100;
+        if (pressed(SDL_CONTROLLER_BUTTON_LEFTSTICK))     b |= 0x0020; // L
+        if (pressed(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)) b |= 0x0010; // R
+
+        rx = SDL_GameControllerGetAxis(g_pad, SDL_CONTROLLER_AXIS_RIGHTX);
+        ry = SDL_GameControllerGetAxis(g_pad, SDL_CONTROLLER_AXIS_RIGHTY);
+        lx = SDL_GameControllerGetAxis(g_pad, SDL_CONTROLLER_AXIS_LEFTX);
+        ly = SDL_GameControllerGetAxis(g_pad, SDL_CONTROLLER_AXIS_LEFTY);
+    }
+
+    // Keyboard fallback / supplement. SDL_GetKeyboardState requires
+    // the VIDEO subsystem (initialized by create_gfx). The keyboard
+    // layout below is the standard for N64 emulators (Project64 /
+    // Mupen-style). Pressed keys OR-in to whatever the pad reports,
+    // so a pad and keyboard can coexist.
+    //
+    //   X       -> A           Z       -> B
+    //   Left-Shift -> Z trigger Enter   -> Start
+    //   Q       -> L            E       -> R
+    //   Arrows  -> D-pad
+    //   I/K/J/L -> C-Up/Down/Left/Right
+    //   W/A/S/D -> Analog stick (full deflection per key)
+    const Uint8* ks = SDL_GetKeyboardState(nullptr);
+    if (ks != nullptr) {
+        if (ks[SDL_SCANCODE_X])      b |= 0x8000;        // A
+        if (ks[SDL_SCANCODE_Z])      b |= 0x4000;        // B
+        if (ks[SDL_SCANCODE_LSHIFT] ||
+            ks[SDL_SCANCODE_SPACE])  b |= 0x2000;        // Z
+        if (ks[SDL_SCANCODE_RETURN] ||
+            ks[SDL_SCANCODE_KP_ENTER]) b |= 0x1000;      // Start
+        if (ks[SDL_SCANCODE_UP])     b |= 0x0800;        // D-Up
+        if (ks[SDL_SCANCODE_DOWN])   b |= 0x0400;        // D-Down
+        if (ks[SDL_SCANCODE_LEFT])   b |= 0x0200;        // D-Left
+        if (ks[SDL_SCANCODE_RIGHT])  b |= 0x0100;        // D-Right
+        if (ks[SDL_SCANCODE_Q])      b |= 0x0020;        // L
+        if (ks[SDL_SCANCODE_E])      b |= 0x0010;        // R
+        if (ks[SDL_SCANCODE_I])      b |= 0x0008;        // C-Up
+        if (ks[SDL_SCANCODE_K])      b |= 0x0004;        // C-Down
+        if (ks[SDL_SCANCODE_J])      b |= 0x0002;        // C-Left
+        if (ks[SDL_SCANCODE_L])      b |= 0x0001;        // C-Right
+
+        // Digital-to-analog stick from WASD. Each key gives full
+        // deflection — diagonals saturate to (±32767, ±32767) before
+        // the deadzone-rescale. If a real pad is also tilting the
+        // stick, sum + saturate.
+        int32_t kx = 0, ky = 0;
+        if (ks[SDL_SCANCODE_A]) kx -= 32767;
+        if (ks[SDL_SCANCODE_D]) kx += 32767;
+        if (ks[SDL_SCANCODE_W]) ky -= 32767;  // SDL Y-axis: up = negative
+        if (ks[SDL_SCANCODE_S]) ky += 32767;
+        int32_t sx = int32_t(lx) + kx;
+        int32_t sy = int32_t(ly) + ky;
+        if (sx >  32767) sx =  32767;
+        if (sx < -32768) sx = -32768;
+        if (sy >  32767) sy =  32767;
+        if (sy < -32768) sy = -32768;
+        lx = (int16_t)sx;
+        ly = (int16_t)sy;
+    }
     *buttons_out = b;
 
     // C-buttons from right stick.
-    int16_t rx = SDL_GameControllerGetAxis(g_pad, SDL_CONTROLLER_AXIS_RIGHTX);
-    int16_t ry = SDL_GameControllerGetAxis(g_pad, SDL_CONTROLLER_AXIS_RIGHTY);
     constexpr int16_t deadzone = 8000;
     if (ry < -deadzone) *buttons_out |= 0x0008; // C-Up
     if (ry >  deadzone) *buttons_out |= 0x0004; // C-Down
     if (rx < -deadzone) *buttons_out |= 0x0002; // C-Left
     if (rx >  deadzone) *buttons_out |= 0x0001; // C-Right
 
-    int16_t lx = SDL_GameControllerGetAxis(g_pad, SDL_CONTROLLER_AXIS_LEFTX);
-    int16_t ly = SDL_GameControllerGetAxis(g_pad, SDL_CONTROLLER_AXIS_LEFTY);
     // Radial deadzone: Xbox One controller sticks rest at ~±300-1500
     // raw; without a deadzone, Stadium reads idle noise as "player
     // tilted the stick" and combines it with button presses — pressing
@@ -416,15 +480,15 @@ static ultramodern::input::connected_device_info_t get_connected_device_info(int
     if (controller_num == 0) {
         ensure_pad_open();
     }
-    // The TCP debug-server override is also a valid "controller" — it
-    // synthesizes contStat from set_button/set_stick. Without this
-    // branch, headless harness runs (no physical pad) hit
-    // "Controller 1 not connected" and the game ignores all the
-    // synthesized input.
-    bool override_active =
-        (controller_num == 0 && pkmnstadium::dbg::g_input_override_active.load());
+    // Port 0 always reports a controller present: keyboard is always
+    // available (as a digital fallback in get_n64_input), the TCP
+    // override may have been claimed by a harness, and a real SDL pad
+    // may or may not be plugged in. All three paths feed buttons into
+    // the same get_n64_input return surface, so the game is told
+    // "yes, there's a controller in port 1" regardless of which
+    // input device the user is actually using.
     ultramodern::input::connected_device_info_t info{};
-    info.connected_device = ((controller_num == 0 && g_pad) || override_active)
+    info.connected_device = (controller_num == 0)
         ? ultramodern::input::Device::Controller
         : ultramodern::input::Device::None;
     info.connected_pak = ultramodern::input::Pak::None;
