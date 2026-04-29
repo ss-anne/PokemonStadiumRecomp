@@ -31,6 +31,12 @@ extern std::atomic<uint16_t> g_buttons_override;
 extern std::atomic<int>      g_stick_x_override;
 extern std::atomic<int>      g_stick_y_override;
 
+// Master audio volume, 0.0..1.0. Default 0 — overnight harness runs
+// re-launch the runner repeatedly, and the boot/intro audio is rough
+// to listen to in a loop. Override per-launch via PSR_VOLUME env var
+// (e.g. PSR_VOLUME=0.5) or at runtime via TCP `set_volume {"value":x}`.
+extern std::atomic<float>    g_audio_volume;
+
 // Render-pipeline counters bumped by RT64Context.
 // send_dl  = OSTask submissions (game asked RSP to process a display list).
 // update_screen = VI swap (game asked the renderer to present a frame).
