@@ -201,6 +201,41 @@ const char* pkmnstadium_interesting_fn_name(int idx) {
 }
 int pkmnstadium_interesting_fn_total(void) { return INTERESTING_FN_COUNT; }
 
+/* ------------------------------------------------------------------ */
+/* func_80019D18 lookup-or-allocate diagnostic.                       */
+/*                                                                    */
+/* Stadium's func_80019D18(idx) does table lookup against the         */
+/* container at *(0x800AC814) and returns NULL when func_8000484C     */
+/* fails (idx >= count, or downstream func_800047C4 returns 0).       */
+/* The menu-load crash at func_86B0027C dereferences this NULL.       */
+/*                                                                    */
+/* These hooks are inserted via game.toml [[patches.hook]] entries    */
+/* — entry hook saves the input idx, exit hook logs (idx, v0) when    */
+/* v0 == 0. Lets us see exactly which idx Stadium asked for.          */
+/* ------------------------------------------------------------------ */
+
+static __thread uint32_t s_lookup_a0_stack[16];
+static __thread int s_lookup_a0_sp = 0;
+
+void pkmnstadium_lookup_enter(uint32_t a0) {
+    if (s_lookup_a0_sp < 16) {
+        s_lookup_a0_stack[s_lookup_a0_sp] = a0;
+    }
+    s_lookup_a0_sp++;
+}
+
+void pkmnstadium_lookup_exit(uint32_t v0) {
+    s_lookup_a0_sp--;
+    if (s_lookup_a0_sp < 0 || s_lookup_a0_sp >= 16) return;
+    uint32_t a0 = s_lookup_a0_stack[s_lookup_a0_sp];
+    if (v0 == 0) {
+        fprintf(stderr,
+            "[lookup] MISS func_80019D18 a0=0x%X (=%u, idx_minus_1=0x%X)\n",
+            a0, a0, a0 - 1);
+        fflush(stderr);
+    }
+}
+
 void pkmnstadium_trace_return(const char *func) {
     /* For "where are we stuck?" the entry log is what matters; returns
      * are recorded too in case we need to reconstruct a call stack. */

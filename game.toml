@@ -2851,23 +2851,22 @@ size = 0x8
 # runtime via CPU code (NOT PI DMA). The decompressed bytes — including
 # all MIPS instructions — never appear at any single offset in
 # baserom.z64, so pret's splat can't see them.
-#
-# Stadium uses link vram 0x8FF00000 as a DYNAMIC SLOT (282 distinct
-# fragments stream through it across gameplay). The engine has the
-# [[input.decompressed_section_pattern]] feature + content-hash runtime
-# dispatch wired up, but activating the pattern surfaces a build-time
-# issue where our basic CFG walk produces too-large impl functions
-# for fragments with internal jump tables (data interpreted as code).
-# Future fix: emit pattern-section impl bodies as runtime-dispatched
-# stubs instead of trying to statically recompile each variant. For
-# now, declare just fragment78 explicitly — Stadium boots through
-# this fragment cleanly.
-# Stadium uses link vram 0x8FF00000 as a dynamic asset slot — 282 distinct
-# fragment bodies stream through it as the player traverses content. The
-# pattern block scans the ROM for every wrapper, deduplicates by content
-# hash, and synthesizes one section per distinct content. The runtime
-# side (register_runtime_fragment) hashes the bytes Stadium just
-# decompressed and looks up the matching section.
+
+# Single-block: id=0xC0, vram 0x8D000000. Tiny dispatch fragment
+# (0x60 bytes decompressed, just a FRAGMENT header + small entry).
+# Surfaces during the menu-load path after the title-screen Start
+# press. Wrapper at ROM 0x5C7A70 (PERS-SZP/Yay0).
+[[input.decompressed_section]]
+name = "frag_8D000000"
+vram = 0x8D000000
+rom_wrapper = 0x5C7A70
+wrapper_format = "pers_szp_yay0"
+
+# Pattern: vram 0x8FF00000. Stadium's primary dynamic-asset slot —
+# 282 distinct fragment bodies stream through it as the player
+# traverses content. Each section is auto-synthesized per wrapper;
+# runtime register_runtime_fragment hashes the bytes Stadium just
+# decompressed and binds func_map to the matching section.
 [[input.decompressed_section_pattern]]
 base_name      = "frag_8FF00000"
 vram           = 0x8FF00000
@@ -2892,3 +2891,17 @@ collision_policy = "suffix"
 func = "Memmap_RelocateFragment"
 before_vram = 0x80001E50  # first instr of Memmap_RelocateFragment ⇒ entry hook
 text = "recomp_register_runtime_fragment(rdram, ctx->r4, ctx->r5);"
+
+# func_80019D18 lookup diagnostic — capture (input_idx, return_v0)
+# pairs to identify which idx Stadium asks for that misses. The
+# menu-load crash at func_86B0027C deref's a NULL returned by this
+# function; without these hooks we can't see what idx triggered it.
+[[patches.hook]]
+func = "func_80019D18"
+before_vram = 0x80019D18  # entry instr (addiu $sp,$sp,-0x30)
+text = "pkmnstadium_lookup_enter(ctx->r4);"
+
+[[patches.hook]]
+func = "func_80019D18"
+before_vram = 0x80019D84  # right after `lw $v0, 0x24($sp)` — v0 is set
+text = "pkmnstadium_lookup_exit(ctx->r2);"
