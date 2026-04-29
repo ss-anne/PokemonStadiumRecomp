@@ -2850,12 +2850,18 @@ size = 0x8
 # Stadium decompresses fragments from PERS-SZP/Yay0 wrappers in ROM at
 # runtime via CPU code (NOT PI DMA). The decompressed bytes — including
 # all MIPS instructions — never appear at any single offset in
-# baserom.z64, so pret's splat can't see them. The static block below
-# declares ONE specific wrapper. Stadium boots through this fragment
-# cleanly. Other fragments in the dynamic-asset slot at vram 0x8FF00000
-# (see project_decompressed_section_feature.md memory file for the
-# Shape-A discovery) need the engine's [[input.decompressed_section_pattern]]
-# feature + runtime content-keyed dispatch — wired in the next session.
+# baserom.z64, so pret's splat can't see them.
+#
+# Stadium uses link vram 0x8FF00000 as a DYNAMIC SLOT (282 distinct
+# fragments stream through it across gameplay). The engine has the
+# [[input.decompressed_section_pattern]] feature + content-hash runtime
+# dispatch wired up, but activating the pattern surfaces a build-time
+# issue where our basic CFG walk produces too-large impl functions
+# for fragments with internal jump tables (data interpreted as code).
+# Future fix: emit pattern-section impl bodies as runtime-dispatched
+# stubs instead of trying to statically recompile each variant. For
+# now, declare just fragment78 explicitly — Stadium boots through
+# this fragment cleanly.
 [[input.decompressed_section]]
 name = "fragment78"
 vram = 0x8FF00000
