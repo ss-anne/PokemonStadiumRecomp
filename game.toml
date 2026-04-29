@@ -34,6 +34,29 @@ elf_path = "disasm/build/pokestadium-us.elf"
 # lookup.cpp into here.
 output_func_path = "generated"
 
+# List of ELF sections that get DMA'd to a runtime address that may
+# differ from their link-time vram. The recompiler reads each
+# .rel.<name> section and emits RELOC_HI16/RELOC_LO16 macros that
+# resolve to section_addresses[idx] + offset at runtime. Without
+# this, fragment-internal LUI/ADDIU pairs would bake the link-time
+# vram (e.g. 0x86B10000 for fragment 17), which the runtime
+# doesn't have committed — leading to access violations on data
+# loads several levels into fragment dispatch (see
+# project_chunked_overlays_and_trampolines.md).
+relocatable_sections_path = "fragments_relocatable.txt"
+
+# pret/pokestadium names BSS sections with the convention
+# `.fragmentN_bss` (underscore), not the ELF default `.fragmentN.bss`
+# (period). Override the suffix so the elf parser pairs each
+# fragment's bss section with its parent and remaps bss-targeted
+# relocs to the parent section's index. Without this, R_MIPS_HI16/
+# LO16 entries pointing into .fragment17_bss surface with
+# target_section = 77 (a non-relocatable bss section) and the
+# recompiler falls back to baking the link-time vram literal —
+# which is exactly the failure mode this whole reloc work is
+# fixing.
+bss_section_suffix = "_bss"
+
 # One C file per function group for fast iteration via the linker
 # `-u <symbol>` override trick.
 single_file_output = false
@@ -2821,3 +2844,51 @@ name = "fragment77_entry"
 section = ".fragment77"
 vram = 0x8FC00000
 size = 0x8
+
+# ── Decompressed fragments (CPU-decompressed at runtime) ──────────────────
+#
+# Stadium decompresses fragments from PERS-SZP/Yay0 wrappers in ROM at
+# runtime via CPU code (NOT PI DMA). The decompressed bytes — including
+# all MIPS instructions — never appear at any single offset in
+# baserom.z64, so pret's splat can't see them.
+#
+# Stadium uses link vram 0x8FF00000 as a DYNAMIC SLOT (282 distinct
+# fragments stream through it across gameplay). The engine has the
+# [[input.decompressed_section_pattern]] feature + content-hash runtime
+# dispatch wired up, but activating the pattern surfaces a build-time
+# issue where our basic CFG walk produces too-large impl functions
+# for fragments with internal jump tables (data interpreted as code).
+# Future fix: emit pattern-section impl bodies as runtime-dispatched
+# stubs instead of trying to statically recompile each variant. For
+# now, declare just fragment78 explicitly — Stadium boots through
+# this fragment cleanly.
+# Stadium uses link vram 0x8FF00000 as a dynamic asset slot — 282 distinct
+# fragment bodies stream through it as the player traverses content. The
+# pattern block scans the ROM for every wrapper, deduplicates by content
+# hash, and synthesizes one section per distinct content. The runtime
+# side (register_runtime_fragment) hashes the bytes Stadium just
+# decompressed and looks up the matching section.
+[[input.decompressed_section_pattern]]
+base_name      = "frag_8FF00000"
+vram           = 0x8FF00000
+wrapper_format = "pers_szp_yay0"
+
+[output]
+collision_policy = "suffix"
+
+# ── Runtime fragment registration hook ────────────────────────────────────
+#
+# Stadium has two fragment-load paths: (1) PI DMA → load_overlays(), which
+# registers funcs in func_map at the runtime address each section was
+# DMA'd to; and (2) CPU-side decompression (PERS-SZP/Yay0) that writes
+# fragment bytes to RDRAM via direct stores. Path (2) bypasses do_dma
+# entirely, so load_overlays / the trampoline scanner never see those
+# fragments.
+#
+# Both paths converge on Memmap_RelocateFragment(id, fragment_ptr) right
+# before the fragment is dispatched. Hooking that one chokepoint covers
+# both paths.
+[[patches.hook]]
+func = "Memmap_RelocateFragment"
+before_vram = 0x80001E50  # first instr of Memmap_RelocateFragment ⇒ entry hook
+text = "recomp_register_runtime_fragment(rdram, ctx->r4, ctx->r5);"
