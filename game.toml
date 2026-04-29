@@ -2847,19 +2847,15 @@ size = 0x8
 
 # ── Decompressed fragments (CPU-decompressed at runtime) ──────────────────
 #
-# Stadium decompresses some fragments from PERS-SZP/Yay0 wrappers in ROM
-# at runtime via CPU code (NOT PI DMA). The decompressed bytes — including
-# all MIPS instructions in the fragment — never appear at any single
-# offset in baserom.z64, so pret's splat can't see them and our
-# previous "carve it out of pokemon_models" approach was sourcing the
-# wrong bytes (see project_fragment78_wrong_source.md memory entry).
-#
-# This block tells N64Recomp to decompress the wrapper at build time
-# from baserom.z64 directly, parse the resulting FRAGMENT-format blob,
-# and synthesize an in-memory section so the rest of the recompilation
-# pipeline treats it like any other ELF section. At runtime, Stadium
-# does the same decompression itself — so the recompiled C matches the
-# bytes Stadium actually executes.
+# Stadium decompresses fragments from PERS-SZP/Yay0 wrappers in ROM at
+# runtime via CPU code (NOT PI DMA). The decompressed bytes — including
+# all MIPS instructions — never appear at any single offset in
+# baserom.z64, so pret's splat can't see them. The static block below
+# declares ONE specific wrapper. Stadium boots through this fragment
+# cleanly. Other fragments in the dynamic-asset slot at vram 0x8FF00000
+# (see project_decompressed_section_feature.md memory file for the
+# Shape-A discovery) need the engine's [[input.decompressed_section_pattern]]
+# feature + runtime content-keyed dispatch — wired in the next session.
 [[input.decompressed_section]]
 name = "fragment78"
 vram = 0x8FF00000
