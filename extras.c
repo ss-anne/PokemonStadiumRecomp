@@ -252,6 +252,56 @@ void pkmnstadium_pers_enter(uint32_t a0, uint32_t a1) {
     s_pers_sp++;
 }
 
+/* main_pool_alloc(size, side) diagnostic. Logs every call's
+ * (size, result) plus the running sMemPool.available so we can
+ * see when/why the pool exhausts. sMemPool is the Stadium static
+ * MainPool struct at 0x800A6070, with available field at +0x1C. */
+
+#define MEM_LOAD_BE32(rdram, paddr) (\
+    ((uint32_t)(rdram)[((paddr) + 0) ^ 3] << 24) | \
+    ((uint32_t)(rdram)[((paddr) + 1) ^ 3] << 16) | \
+    ((uint32_t)(rdram)[((paddr) + 2) ^ 3] <<  8) | \
+    ((uint32_t)(rdram)[((paddr) + 3) ^ 3]))
+
+static __thread uint32_t s_pool_size_stack[16];
+static __thread int s_pool_sp = 0;
+
+void pkmnstadium_pool_alloc_enter(uint32_t size) {
+    if (s_pool_sp < 16) s_pool_size_stack[s_pool_sp] = size;
+    s_pool_sp++;
+}
+
+void pkmnstadium_pool_alloc_exit(uint8_t* rdram, uint32_t v0) {
+    s_pool_sp--;
+    if (s_pool_sp < 0 || s_pool_sp >= 16) return;
+    uint32_t size = s_pool_size_stack[s_pool_sp];
+    /* sMemPool.available at 0x800A608C */
+    uint32_t avail = MEM_LOAD_BE32(rdram, 0x000A608Cu);
+    uint32_t pool_start = MEM_LOAD_BE32(rdram, 0x000A6090u);  /* +0x20 */
+    uint32_t pool_end   = MEM_LOAD_BE32(rdram, 0x000A6094u);  /* +0x24 */
+    uint32_t listL      = MEM_LOAD_BE32(rdram, 0x000A6098u);  /* +0x28 */
+    uint32_t listR      = MEM_LOAD_BE32(rdram, 0x000A609Cu);  /* +0x2C */
+    /* Log full state on FAILURE; otherwise log a one-line summary
+     * once per ~32 KiB of total alloc activity. */
+    static __thread uint64_t s_total_allocd = 0;
+    static __thread uint64_t s_last_logged = 0;
+    s_total_allocd += size;
+    if (v0 == 0) {
+        fprintf(stderr,
+            "[pool] ALLOC FAIL size=0x%X (=%u) avail=0x%X "
+            "start=0x%08X end=0x%08X listL=0x%08X listR=0x%08X\n",
+            size, size, avail, pool_start, pool_end, listL, listR);
+        fflush(stderr);
+    } else if (s_total_allocd - s_last_logged >= 0x8000) {
+        s_last_logged = s_total_allocd;
+        fprintf(stderr,
+            "[pool] ok size=0x%X result=0x%08X avail=0x%X "
+            "(total alloc'd: 0x%llX)\n",
+            size, v0, avail, (unsigned long long)s_total_allocd);
+        fflush(stderr);
+    }
+}
+
 void pkmnstadium_pers_exit(uint8_t* rdram, uint32_t v0) {
     s_pers_sp--;
     if (s_pers_sp < 0 || s_pers_sp >= 16) return;

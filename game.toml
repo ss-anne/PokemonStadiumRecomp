@@ -2918,3 +2918,16 @@ text = "pkmnstadium_pers_enter(ctx->r4, ctx->r5);"
 func = "func_80003DC4"
 before_vram = 0x80003F4C   # right after `lw $v0, 0x2C($sp)` — v0 is set
 text = "pkmnstadium_pers_exit(rdram, ctx->r2);"
+
+# main_pool_alloc diagnostic: log size + result + sMemPool.available
+# on every call, with full state on alloc-failure. sMemPool is the
+# static at 0x800A6070; availability sits at +0x1C = 0x800A608C.
+[[patches.hook]]
+func = "main_pool_alloc"
+before_vram = 0x800025C4   # entry instr (addiu $sp,$sp,-0x20)
+text = "pkmnstadium_pool_alloc_enter(ctx->r4);"
+
+[[patches.hook]]
+func = "main_pool_alloc"
+before_vram = 0x80002618   # right after `lw $v0, 0x1C($sp)` — v0 set
+text = "pkmnstadium_pool_alloc_exit(rdram, ctx->r2);"
