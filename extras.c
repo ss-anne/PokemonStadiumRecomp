@@ -740,20 +740,18 @@ uint32_t pkmnstadium_memmap_get_exit(uint32_t game_result) {
     int idx = (s_memmap_get_sp >= 0 && s_memmap_get_sp < 16) ? s_memmap_get_sp : 0;
     uint32_t input = s_memmap_get_input_stack[idx];
 
-    /* Bounded scope: only the known-ambiguous 0x8FF00000 bucket
-     * AND only when the game's own resolution failed (returned the
-     * input as a passthrough, meaning gFragments[0xEF] was unset OR
-     * the offset was outside the registered variant). If the game
-     * gave us a real RAM address, USE IT — overriding then would
-     * regress geo data that was correctly resolved.
-     *
-     * Symptom of over-broad override: branch_and_link geo cmd reads
-     * a target literal that the game ALREADY translated correctly,
-     * we re-translate it to a different variant, and the loop
-     * recurses infinitely. */
+    /* Bounded scope: only the known-ambiguous 0x8FF00000 bucket. */
     if ((input & 0xFFF00000u) != 0x8FF00000u) return game_result;
     if (input < 0x81000000u || input >= 0x90000000u) return game_result;
-    if (game_result != input) return game_result;  /* game resolved successfully */
+    /* Game's answer is "good" if game_result lies in a registered
+     * variant's runtime range. If yes, leave it alone — that's the
+     * common branch_and_link case where the game already resolved
+     * correctly. Override only when game's answer landed OUTSIDE
+     * any registered variant's [base, base+size) range. */
+    extern int recomp_addr_in_loaded_variant(uint32_t bucket, uint32_t addr);
+    if (recomp_addr_in_loaded_variant(input & 0xFFF00000u, game_result)) {
+        return game_result;
+    }
 
 #ifdef _WIN32
     /* Stack walk. Don't skip; we'll log every frame and see which one(s)
