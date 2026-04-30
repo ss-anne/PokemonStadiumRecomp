@@ -3017,12 +3017,16 @@ func = "func_8003AD58"
 before_vram = 0x8003AF60
 text = "pkmnstadium_audio_diag(rdram, (uint32_t)ctx->r16, (uint32_t)ctx->r17, (uint32_t)ctx->r11, (uint32_t)MEM_W(ctx->r16, 0X28), (uint16_t)ctx->r3);"
 
-# Memmap_GetFragmentVaddr caller-context override.
+# Memmap_GetFragmentVaddr data-context override.
+#
 # Bounded scope: only intervenes for inputs in 0x8FF00000-range
-# (the known-ambiguous decompressed_section_pattern bucket). Walks
-# the host call stack to find the calling fragment, then asks
-# librecomp's recomp_resolve_fragment_via_caller_pc to resolve the
-# link vaddr against THAT specific variant. Cached per callsite PC.
+# (the known-ambiguous decompressed_section_pattern bucket). Reads
+# the geo walker's current command pointer (gGeoLayoutCommand at
+# vaddr 0x800ABE00) and passes it as the "data context": whichever
+# variant's [base, base+size) contains gGeoLayoutCommand is the
+# variant the literal should resolve against. Restores the original
+# game's implicit "active variant = currently-walked variant"
+# invariant without the single-pointer-per-id constraint.
 [[patches.hook]]
 func = "Memmap_GetFragmentVaddr"
 before_vram = 0x800020E0   # entry — save input arg
@@ -3031,7 +3035,10 @@ text = "pkmnstadium_memmap_get_enter((uint32_t)ctx->r4);"
 [[patches.hook]]
 func = "Memmap_GetFragmentVaddr"
 before_vram = 0x80002140   # exit — override before delay-slot
-text = "ctx->r4 = pkmnstadium_memmap_get_exit((uint32_t)ctx->r4);"
+# MEM_W macro expects a sign-extended gpr value as the address.
+# The literal 0x800ABE00 is unsigned and would wrap; cast to int32_t
+# first so the high bit triggers sign-extension to 0xFFFFFFFF800ABE00.
+text = "ctx->r4 = pkmnstadium_memmap_get_exit((uint32_t)ctx->r4, (uint32_t)MEM_W(0, (int32_t)0x800ABE00));"
 
 # Asset-loader chain hooks — trace ASSET_LOAD2 (func_800044F4) and
 # its sub-asset getter (func_8000484C / func_800047C4) so we can

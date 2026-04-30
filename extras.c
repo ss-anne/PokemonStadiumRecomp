@@ -663,35 +663,49 @@ void pkmnstadium_cri_exit(uint32_t cur_buttondown_via_cont0_word, uint32_t butto
     }
 }
 
-/* Caller-context-aware Memmap_GetFragmentVaddr override.
+/* Data-context-driven Memmap_GetFragmentVaddr override.
  *
- * For ambiguous fragment buckets (currently only 0x8FF00000 — the
- * decompressed_section_pattern variants for stadium_models), the
- * game's gFragments[id] resolution is one-pointer-per-id and
- * silently routes to whichever variant was registered last.
- * Different consumers (fragment17, fragment62, ...) want different
- * variants — there's no globally-correct heuristic.
+ * Pokemon Stadium's pattern fragments share one game-side fragment id
+ * (e.g. 0xEF for stadium_models at link-vram 0x8FF00000). gFragments[id]
+ * is a single-pointer table: it tracks whichever variant was registered
+ * most recently. In the original game this is fine because only one
+ * variant is materialized in RDRAM at a time; in the recompiler,
+ * multiple variants are host-resident concurrently, so gFragments[id]
+ * becomes ambiguous.
  *
- * This override walks the host call stack to find the calling
- * fragment, then asks librecomp to resolve the link vaddr against
- * THAT specific variant. If that succeeds, use the result. Otherwise
- * fall through to the game's native resolution.
+ * The original game maintains an implicit invariant: while
+ * process_geo_layout walks variant X's data, gFragments[X.id] points
+ * to X's buffer, and embedded 0x8FF0XXXX literals in X's command
+ * stream resolve back into X. To restore that semantics without the
+ * single-pointer constraint, we use the walker's CURRENT COMMAND
+ * POINTER (gGeoLayoutCommand at vaddr 0x800ABE00) as the data
+ * context: it points into exactly one variant's RDRAM buffer, and
+ * embedded literals should resolve against that variant.
  *
- * Bounded scope: only fires for inputs in 0x8FF00000-range (the
- * known-ambiguous bucket). Other fragment buckets get the game's
- * native answer untouched.
+ * Resolution strategy:
  *
- * Cached: callsite host PC → resolved_target. Stack walks are
- * expensive (~microseconds), but each callsite repeats the same
- * resolution. Cache it after the first walk.
+ *  1. If the game's native answer (gFragments[id] + offset) lies
+ *     inside a registered variant of this bucket, trust it. Common
+ *     case for steady-state walks where gFragments[id] points to the
+ *     correct variant.
  *
- * Logged: first 32 cache misses get full diagnostic dump (request
- * vaddr, caller chain, resolved target, candidates). Cache hits
- * are silent.
+ *  2. Otherwise: use the walker's current data context. Find the
+ *     variant containing gGeoLayoutCommand and resolve against it.
+ *
+ *  3. If neither succeeds (top-level call with no data context, AND
+ *     no native variant covers the offset): fall through to the game's
+ *     native answer. This deliberately does NOT pick a variant by
+ *     heuristic — the underlying issue is a missing variant load in
+ *     the game-state orchestration, and a heuristic pick would silently
+ *     mask it. The lookup-miss crash in this path IS the diagnostic.
+ *
+ * Bounded scope: only fires for inputs in 0x8FF00000-range. Other
+ * fragment buckets (single-variant) get the game's native answer
+ * untouched.
  */
-extern int32_t recomp_resolve_fragment_via_caller_pc(uint32_t link_vaddr,
-                                                       uintptr_t caller_pc);
-extern int32_t recomp_lookup_fragment_offset(uint32_t link_vaddr);
+extern int32_t recomp_resolve_via_data_context(uint32_t link_vaddr,
+                                                  uint32_t data_ctx_addr);
+extern int recomp_addr_in_loaded_variant(uint32_t bucket, uint32_t addr);
 
 static __thread uint32_t s_memmap_get_input_stack[16];
 static __thread int s_memmap_get_sp = 0;
@@ -701,41 +715,7 @@ void pkmnstadium_memmap_get_enter(uint32_t input) {
     s_memmap_get_sp++;
 }
 
-/* Cache: callsite host PC → (input, resolved_target). */
-#define MEMMAP_CACHE_CAP 256
-typedef struct {
-    uintptr_t callsite_pc;
-    uint32_t  input;
-    uint32_t  resolved;
-} memmap_cache_entry;
-static memmap_cache_entry s_memmap_cache[MEMMAP_CACHE_CAP];
-static volatile int s_memmap_cache_n = 0;
-
-static int memmap_cache_lookup(uintptr_t callsite_pc, uint32_t input,
-                                uint32_t* out_resolved) {
-    int n = __atomic_load_n(&s_memmap_cache_n, __ATOMIC_RELAXED);
-    if (n > MEMMAP_CACHE_CAP) n = MEMMAP_CACHE_CAP;
-    for (int i = 0; i < n; i++) {
-        if (s_memmap_cache[i].callsite_pc == callsite_pc &&
-            s_memmap_cache[i].input == input) {
-            *out_resolved = s_memmap_cache[i].resolved;
-            return 1;
-        }
-    }
-    return 0;
-}
-
-static void memmap_cache_insert(uintptr_t callsite_pc, uint32_t input,
-                                  uint32_t resolved) {
-    int idx = __atomic_fetch_add(&s_memmap_cache_n, 1, __ATOMIC_RELAXED);
-    if (idx < MEMMAP_CACHE_CAP) {
-        s_memmap_cache[idx].callsite_pc = callsite_pc;
-        s_memmap_cache[idx].input = input;
-        s_memmap_cache[idx].resolved = resolved;
-    }
-}
-
-uint32_t pkmnstadium_memmap_get_exit(uint32_t game_result) {
+uint32_t pkmnstadium_memmap_get_exit(uint32_t game_result, uint32_t data_ctx) {
     s_memmap_get_sp--;
     int idx = (s_memmap_get_sp >= 0 && s_memmap_get_sp < 16) ? s_memmap_get_sp : 0;
     uint32_t input = s_memmap_get_input_stack[idx];
@@ -743,70 +723,28 @@ uint32_t pkmnstadium_memmap_get_exit(uint32_t game_result) {
     /* Bounded scope: only the known-ambiguous 0x8FF00000 bucket. */
     if ((input & 0xFFF00000u) != 0x8FF00000u) return game_result;
     if (input < 0x81000000u || input >= 0x90000000u) return game_result;
-    /* Game's answer is "good" if game_result lies in a registered
-     * variant's runtime range. If yes, leave it alone — that's the
-     * common branch_and_link case where the game already resolved
-     * correctly. Override only when game's answer landed OUTSIDE
-     * any registered variant's [base, base+size) range. */
-    extern int recomp_addr_in_loaded_variant(uint32_t bucket, uint32_t addr);
+
+    /* Step 1: trust the game's answer when it lands inside a registered
+     * variant of this bucket. */
     if (recomp_addr_in_loaded_variant(input & 0xFFF00000u, game_result)) {
         return game_result;
     }
 
-#ifdef _WIN32
-    /* Stack walk. Don't skip; we'll log every frame and see which one(s)
-     * map to a registered section. */
-    void* frames[24];
-    USHORT n_frames = CaptureStackBackTrace(0, 24, frames, NULL);
-    if (n_frames == 0) return game_result;
-    uintptr_t callsite_pc = (uintptr_t)frames[0];
+    /* Step 2: data-context resolution. Walker's current data pointer
+     * lives in the variant currently being walked. */
+    int32_t resolved = recomp_resolve_via_data_context(input, data_ctx);
 
-    /* Cache check first. */
-    uint32_t cached;
-    if (memmap_cache_lookup(callsite_pc, input, &cached)) {
-        return cached ? cached : game_result;
-    }
-
-    /* Walk frames looking for a fragment-resident PC. */
-    int32_t resolved = 0;
-    uintptr_t resolved_at_pc = 0;
-    int resolved_frame_idx = -1;
-    for (USHORT i = 0; i < n_frames; i++) {
-        uintptr_t pc = (uintptr_t)frames[i];
-        int32_t r = recomp_resolve_fragment_via_caller_pc(input, pc);
-        if (r != 0) {
-            resolved = r;
-            resolved_at_pc = pc;
-            resolved_frame_idx = i;
-            break;
-        }
-    }
-
-    /* Log first N misses to stderr for validation. Dump all frames so
-     * we can see what's on the stack and tune skip behavior. */
     static volatile int s_n_logged = 0;
     int log_idx = __atomic_fetch_add(&s_n_logged, 1, __ATOMIC_RELAXED);
-    if (log_idx < 8) {
+    if (log_idx < 16) {
         fprintf(stderr,
             "[memmap-ctx] in=0x%08X game-result=0x%08X "
-            "n_frames=%u resolved=0x%08X resolved_at_idx=%d\n",
-            input, game_result, n_frames, (uint32_t)resolved,
-            resolved_frame_idx);
-        for (USHORT i = 0; i < n_frames && i < 12; i++) {
-            fprintf(stderr, "  frame[%u] pc=%p\n", i, frames[i]);
-        }
+            "data-ctx=0x%08X resolved=0x%08X\n",
+            input, game_result, data_ctx, (uint32_t)resolved);
         fflush(stderr);
     }
 
-    /* Cache the answer (resolved if found, else 0 marker for "fall through"). */
-    memmap_cache_insert(callsite_pc, input,
-        resolved != 0 ? (uint32_t)resolved : 0);
-
     if (resolved != 0) return (uint32_t)resolved;
-#else
-    (void)input;
-#endif
-
     return game_result;
 }
 
