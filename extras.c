@@ -25,6 +25,8 @@
  * up top forces all subsequent code to use renamed locals if
  * needed; current code uses a non-conflicting name. */
 #  include <windows.h>
+#  include <dbghelp.h>
+#  pragma comment(lib, "dbghelp.lib")
 #endif
 
 /* Forward-declare recomp_context — librecomp defines the real one. */
@@ -418,6 +420,119 @@ void pkmnstadium_audio_diag(uint8_t* rdram, uint32_t s0_vaddr,
     }
 }
 
+/* __amDMA entry diagnostic — log addr/len/D_800FC820 flag state.
+ * Helps figure out whether the OOB DMAs are coming from ROM-path
+ * calls (correct path, but with bad addr) or RAM-path-supposed-to-
+ * be-RAM calls (where the flag isn't set when it should be). */
+void pkmnstadium_amdma_log(uint8_t* rdram, uint32_t addr, uint32_t len) {
+    static int s_n = 0;
+    s_n++;
+    /* Read D_800FC820 from RAM. */
+    uint32_t flag_paddr = 0x000FC820u;
+    uint32_t flag =
+        ((uint32_t)rdram[(flag_paddr + 0) ^ 3] << 24) |
+        ((uint32_t)rdram[(flag_paddr + 1) ^ 3] << 16) |
+        ((uint32_t)rdram[(flag_paddr + 2) ^ 3] <<  8) |
+        ((uint32_t)rdram[(flag_paddr + 3) ^ 3]);
+    /* Suspect: addr looks like it'll go OOB on the ROM path
+     * (rom_base = 0x10000000, rom_size = 0x2000000, so any phys
+     *  > 0x12000000 is OOB). */
+    int suspect = (addr > 0x02000000u) || ((flag & 0x80000000u) == 0 && addr >= 0x80000000u);
+    if (s_n <= 16 || suspect) {
+        if (s_n <= 256) {  /* hard cap to avoid spam */
+            fprintf(stderr,
+                "[amdma] #%d addr=0x%08X len=0x%X D_800FC820=0x%08X (RAM_path=%d)%s\n",
+                s_n, addr, len, flag, (flag & 0x80000000u) ? 1 : 0,
+                suspect ? " <-- SUSPECT" : "");
+            fflush(stderr);
+        }
+    }
+}
+
+/* func_8003BD2C SoundBank loader diagnostic.
+ *
+ * Audio crashes in __amDMA reading from ROM addresses past end of
+ * cart (e.g. 0x18C73F84 vs ROM size 0x2000000). Those addresses
+ * come from wave_list[i].base after func_8003BD2C does
+ * `wave_list[i].base += wave_tables_offset`. Either the SoundBank's
+ * stored wave_list[i].base is corrupt, or arg1 (wave_tables_offset)
+ * is bogus, or both.
+ *
+ * Entry hook: log (soundbank addr, wave_tables_offset).
+ * Exit hook: read first 4 entries' resolved wave_list[i].base values
+ * for sanity. wave_list pointer is at +0x28 of SoundBank;
+ * wave_list[i] is a Wave* (4 bytes); Wave.base is at offset 0 of Wave. */
+static __thread uint32_t s_sb_loader_sb_stack[8];
+static __thread int s_sb_loader_sp = 0;
+
+void pkmnstadium_sb_loader_exit_log(uint8_t* rdram, uint32_t soundbank);
+
+void pkmnstadium_sb_loader_args_log(uint8_t* rdram, uint32_t soundbank,
+                                      uint32_t wave_tables_offset) {
+    if (s_sb_loader_sp < 8) s_sb_loader_sb_stack[s_sb_loader_sp] = soundbank;
+    s_sb_loader_sp++;
+    static int s_n = 0;
+    s_n++;
+    if (s_n > 16) return;
+    fprintf(stderr,
+        "[sb-loader] enter sb=0x%08X wave_tables_offset=0x%08X\n",
+        soundbank, wave_tables_offset);
+    fflush(stderr);
+}
+
+void pkmnstadium_sb_loader_exit_log_tls(uint8_t* rdram) {
+    s_sb_loader_sp--;
+    int idx = (s_sb_loader_sp >= 0 && s_sb_loader_sp < 8) ? s_sb_loader_sp : 0;
+    uint32_t soundbank = s_sb_loader_sb_stack[idx];
+    pkmnstadium_sb_loader_exit_log(rdram, soundbank);
+}
+
+void pkmnstadium_sb_loader_exit_log(uint8_t* rdram, uint32_t soundbank) {
+    static int s_n = 0;
+    s_n++;
+    if (s_n > 16) return;
+    if (soundbank < 0x80000000u || soundbank >= 0x80800000u) {
+        fprintf(stderr, "[sb-loader] exit sb=0x%08X out-of-range\n", soundbank);
+        fflush(stderr);
+        return;
+    }
+    /* Read SoundBank fields: wave_list ptr at offset 0x28, count at offset 0x00. */
+    uint32_t sb_paddr = soundbank & 0x1FFFFFFFu;
+#define RD_BE32(paddr) (((uint32_t)rdram[((paddr) + 0) ^ 3] << 24) | \
+                        ((uint32_t)rdram[((paddr) + 1) ^ 3] << 16) | \
+                        ((uint32_t)rdram[((paddr) + 2) ^ 3] <<  8) | \
+                        ((uint32_t)rdram[((paddr) + 3) ^ 3]))
+    /* SoundBank layout (disasm/include/sound.h):
+     *   0x00 char header_name[16]
+     *   0x10 u32 flags
+     *   0x14 char wbk_name[12]
+     *   0x20 s32 count
+     *   0x24 char* basenote
+     *   0x28 f32* detune
+     *   0x2C ALWaveTable** wave_list */
+    uint32_t count = RD_BE32(sb_paddr + 0x20);
+    uint32_t wave_list = RD_BE32(sb_paddr + 0x2C);
+    fprintf(stderr,
+        "[sb-loader] exit sb=0x%08X count=%u wave_list=0x%08X",
+        soundbank, count, wave_list);
+    if (wave_list >= 0x80000000u && wave_list < 0x80800000u) {
+        uint32_t wl_paddr = wave_list & 0x1FFFFFFFu;
+        uint32_t n = count > 4 ? 4 : count;
+        for (uint32_t i = 0; i < n; i++) {
+            uint32_t wave_ptr = RD_BE32(wl_paddr + i * 4);
+            uint32_t base = 0;
+            if (wave_ptr >= 0x80000000u && wave_ptr < 0x80800000u) {
+                base = RD_BE32((wave_ptr & 0x1FFFFFFFu) + 0);
+            }
+            fprintf(stderr, " wl[%u]=0x%08X(base=0x%08X)",
+                i, wave_ptr, base);
+        }
+    }
+    fprintf(stderr, "\n");
+#undef RD_BE32
+    fflush(stderr);
+}
+
 /* func_8003C204 lazy-resolver argument log.
  *
  * Signature: void func_8003C204(u8* arr, u32 base, u32 count) — adds
@@ -793,12 +908,38 @@ void pkmnstadium_persload_exit(uint32_t ret) {
 void pkmnstadium_geo_entry_log(uint32_t pool_arg, uint32_t segptr) {
     static int s_n = 0;
     s_n++;
-    if (s_n <= 32) {
-        fprintf(stderr,
-            "[geo-entry] #%d pool=0x%08X segptr=0x%08X\n",
-            s_n, pool_arg, segptr);
-        fflush(stderr);
+    int log_now = (s_n <= 32) || (segptr == 0);
+    if (!log_now) return;
+    fprintf(stderr,
+        "[geo-entry] #%d pool=0x%08X segptr=0x%08X\n",
+        s_n, pool_arg, segptr);
+#ifdef _WIN32
+    /* For NULL segptr (the white-screen attract bug), capture a
+     * host backtrace so we can identify which caller is passing
+     * NULL geo-data. */
+    if (segptr == 0) {
+        HANDLE proc = GetCurrentProcess();
+        SymInitialize(proc, NULL, TRUE);
+        void* frames[16];
+        USHORT n = CaptureStackBackTrace(0, 16, frames, NULL);
+        char symbuf[sizeof(SYMBOL_INFO) + 256];
+        SYMBOL_INFO* sym = (SYMBOL_INFO*)symbuf;
+        sym->SizeOfStruct = sizeof(SYMBOL_INFO);
+        sym->MaxNameLen = 255;
+        IMAGEHLP_LINE64 line; memset(&line, 0, sizeof(line));
+        line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+        for (USHORT i = 0; i < n && i < 12; i++) {
+            DWORD64 disp64 = 0; DWORD disp32 = 0;
+            const char* name = "?"; const char* file = "?"; DWORD lineno = 0;
+            if (SymFromAddr(proc, (DWORD64)frames[i], &disp64, sym)) name = sym->Name;
+            if (SymGetLineFromAddr64(proc, (DWORD64)frames[i], &disp32, &line)) {
+                file = line.FileName; lineno = line.LineNumber;
+            }
+            fprintf(stderr, "  #%02u %s (%s:%lu)\n", i, name, file, lineno);
+        }
     }
+#endif
+    fflush(stderr);
 }
 
 /* process_geo_layout dispatch-site diagnostic.

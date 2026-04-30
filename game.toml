@@ -3138,12 +3138,25 @@ func = "func_8003C204"
 before_vram = 0x8003C204
 text = "pkmnstadium_resolver_log((uint32_t)ctx->r4, (uint32_t)ctx->r5, (uint32_t)ctx->r6);"
 
-# Phase 1 diagnosis: dump the first 0x40 bytes of the struct at the
-# entry of func_8003BD2C (the SoundBank loader). Lets us diff against
-# the synth-read-time dump from pkmnstadium_audio_diag for the bank at
-# 0x8018A1B0 — answers whether the data was valid at load time and
-# got overwritten, or was bad from the start.
+# func_8003BD2C entry hook — combined diag:
+#   - sb_loader_enter dumps first 0x40 bytes of the struct (legacy
+#     diagnostic for the audio UAF investigation)
+#   - sb_loader_args_log captures args (soundbank, wave_tables_offset)
+#     for the wave-bank corruption investigation
 [[patches.hook]]
 func = "func_8003BD2C"
 before_vram = 0x8003BD2C
-text = "pkmnstadium_sb_loader_enter(rdram, (uint32_t)ctx->r4);"
+text = "pkmnstadium_sb_loader_enter(rdram, (uint32_t)ctx->r4); pkmnstadium_sb_loader_args_log(rdram, (uint32_t)ctx->r4, (uint32_t)ctx->r5);"
+
+[[patches.hook]]
+func = "func_8003BD2C"
+before_vram = 0x8003BEEC   # right before jr — TLS-stack pop gets correct soundbank
+text = "pkmnstadium_sb_loader_exit_log_tls(rdram);"
+
+# __amDMA entry — log addr, len, D_800FC820 flag state. Used to
+# distinguish bad DMAs from "RAM-resident bank, ROM-path-taken" vs
+# "ROM-resident bank, addr is bogus."
+[[patches.hook]]
+func = "__amDMA"
+before_vram = 0x8003C8DC
+text = "pkmnstadium_amdma_log(rdram, (uint32_t)ctx->r4, (uint32_t)ctx->r5);"
