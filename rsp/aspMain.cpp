@@ -3007,6 +3007,7 @@ L_1BB0:
     }
     // lqv         $v29[0], 0x0($21)
     rsp.LQV<0>(rsp.vpu.r[29], r21, 0X0);
+L_1BB4:
     // vaddc       $v19, $v19, $v24[5]
     rsp.VADDC<13>(rsp.vpu.r[19], rsp.vpu.r[19], rsp.vpu.r[24]);
     // lqv         $v17[0], 0x0($16)
@@ -4086,6 +4087,11 @@ do_indirect_jump:
         // hit by Stadium's menu-music tasks that end with a 0
         // sentinel in the dispatch table.
         case 0x1000: return RspExitReason::Broke;
+        // Stadium menu-music dispatch — 0xCBB4 (high bit flag + handler
+        // 0xBB4) maps via the OR/AND to 0x1BB4. The static analysis
+        // missed L_1BB4 because it's mid-block of L_1BB0; we
+        // explicitly add the label and case so the dispatch lands.
+        case 0x1BB4: goto L_1BB4;
         case 0x107C: goto L_107C;
         case 0x2044: goto L_2044;
         case 0x1034: goto L_1034;
