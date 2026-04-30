@@ -874,7 +874,10 @@ void pkmnstadium_persload_exit(uint32_t ret) {
  * passed a segptr that translates via Memmap_GetFragmentVaddr to a
  * pool address holding garbage; this hook lets us pin the
  * fragment-vaddr source. */
-void pkmnstadium_geo_entry_log(uint32_t pool_arg, uint32_t segptr) {
+extern void recomp_diag_dump_variant_candidates_for_offset(
+    void* rdram, uint32_t pattern_id, uint32_t offset);
+
+void pkmnstadium_geo_entry_log(void* rdram, uint32_t pool_arg, uint32_t segptr) {
     static int s_n = 0;
     s_n++;
     int log_now = (s_n <= 32) || (segptr == 0);
@@ -882,6 +885,32 @@ void pkmnstadium_geo_entry_log(uint32_t pool_arg, uint32_t segptr) {
     fprintf(stderr,
         "[geo-entry] #%d pool=0x%08X segptr=0x%08X\n",
         s_n, pool_arg, segptr);
+
+    /* Option C variant-selection probe: when segptr is in pattern
+     * bucket 0x8FF00000 (= a fragment-vaddr literal that needs
+     * runtime resolution), dump every loaded variant of id=0xEF
+     * whose size covers the requested offset and peek at the bytes
+     * at runtime_base + offset. Shows which variants have plausible
+     * geo data at the requested offset — narrows "which variant
+     * does fragment62 actually want?" to a small set. One-shot per
+     * unique segptr. */
+    if ((segptr & 0xFFF00000u) == 0x8FF00000u &&
+        segptr >= 0x81000000u && segptr < 0x90000000u)
+    {
+        static uint32_t s_probed[32] = {0};
+        static int s_n_probed = 0;
+        int already = 0;
+        for (int i = 0; i < s_n_probed && i < 32; i++) {
+            if (s_probed[i] == segptr) { already = 1; break; }
+        }
+        if (!already && s_n_probed < 32) {
+            s_probed[s_n_probed++] = segptr;
+            const uint32_t pattern_id = ((segptr & 0x0FF00000u) >> 0x14) - 0x10;
+            const uint32_t offset = segptr & 0x000FFFFFu;
+            recomp_diag_dump_variant_candidates_for_offset(
+                rdram, pattern_id, offset);
+        }
+    }
 #ifdef _WIN32
     /* For NULL segptr (the white-screen attract bug), capture a
      * host backtrace so we can identify which caller is passing
@@ -956,8 +985,31 @@ void pkmnstadium_geo_dispatch_log(uint8_t* rdram, uint32_t cmd_byte,
  * smaller than 0x80000000 — that means a segment/fragment was missing
  * its registration and the function returned the input pass-through,
  * which downstream callers will use as a function pointer or memory
- * address and crash on. */
-void pkmnstadium_addr_translate_log(uint32_t in, uint32_t out) {
+ * address and crash on.
+ *
+ * Also runs the Option-C variant-selection census: when input is in
+ * the pattern bucket 0x8FF00000, fire the structural-parse probe
+ * once per unique input. Builds a per-literal report of which
+ * variant fragment62 (or any other caller) actually wants. */
+void pkmnstadium_addr_translate_log(void* rdram, uint32_t in, uint32_t out) {
+    /* Option C census: any 0x8FF0XXXX input gets one-shot probed. */
+    if ((in & 0xFFF00000u) == 0x8FF00000u &&
+        in >= 0x81000000u && in < 0x90000000u) {
+        static uint32_t s_probed[64] = {0};
+        static int s_n_probed = 0;
+        int already = 0;
+        for (int i = 0; i < s_n_probed && i < 64; i++) {
+            if (s_probed[i] == in) { already = 1; break; }
+        }
+        if (!already && s_n_probed < 64) {
+            s_probed[s_n_probed++] = in;
+            const uint32_t pattern_id = ((in & 0x0FF00000u) >> 0x14) - 0x10;
+            const uint32_t offset = in & 0x000FFFFFu;
+            recomp_diag_dump_variant_candidates_for_offset(
+                rdram, pattern_id, offset);
+        }
+    }
+
     int suspect = (out != 0 && out < 0x80000000u);
     if (!suspect) return;
     static int s_n = 0;

@@ -3079,7 +3079,7 @@ text = "pkmnstadium_persload_exit((uint32_t)ctx->r2);"
 [[patches.hook]]
 func = "process_geo_layout"
 before_vram = 0x80018B70
-text = "pkmnstadium_geo_entry_log((uint32_t)ctx->r4, (uint32_t)ctx->r5);"
+text = "pkmnstadium_geo_entry_log(rdram, (uint32_t)ctx->r4, (uint32_t)ctx->r5);"
 
 # process_geo_layout dispatch-site hook — fires right before the
 # `jalr $t9` at vram 0x80018C00 inside process_geo_layout. Logs
@@ -3097,10 +3097,15 @@ text = "pkmnstadium_geo_dispatch_log(rdram, (uint32_t)ctx->r14, (uint32_t)ctx->r
 # input was returned, which downstream callers treat as a vaddr and
 # crash on. At hook position 0x80002F20 (the jr $ra), ctx->r4 still
 # holds the original input arg, ctx->r2 has the return value.
+#
+# Also drives the Option-C variant-selection census: any input in
+# the pattern bucket triggers a one-shot structural-parse probe of
+# every loaded variant whose size covers the offset. Pass `rdram`
+# so the helper can peek at variant bytes.
 [[patches.hook]]
 func = "Util_ConvertAddrToVirtAddr"
 before_vram = 0x80002F20   # right before jr $ra
-text = "pkmnstadium_addr_translate_log((uint32_t)ctx->r4, (uint32_t)ctx->r2);"
+text = "pkmnstadium_addr_translate_log(rdram, (uint32_t)ctx->r4, (uint32_t)ctx->r2);"
 
 # func_80010FDC entry diagnostic — geo layout cmd-8 handler that
 # converts arg1 from seg-addr to vaddr then CALLS it. Stadium hits
