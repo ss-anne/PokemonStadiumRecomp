@@ -3020,4 +3020,4 @@ text = "ctx->r2 = 0;"
 [[patches.hook]]
 func = "func_8003AD58"
 before_vram = 0x8003AF60
-text = "pkmnstadium_audio_diag((uint32_t)ctx->r16, (uint32_t)ctx->r17, (uint32_t)ctx->r11, (uint32_t)MEM_W(ctx->r16, 0X28), (uint16_t)ctx->r3);"
+text = "pkmnstadium_audio_diag(rdram, (uint32_t)ctx->r16, (uint32_t)ctx->r17, (uint32_t)ctx->r11, (uint32_t)MEM_W(ctx->r16, 0X28), (uint16_t)ctx->r3); ctx->r11 = pkmnstadium_audio_safe_ptr((uint32_t)ctx->r11, (uint16_t)ctx->r3);"

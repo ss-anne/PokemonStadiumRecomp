@@ -354,16 +354,45 @@ void pkmnstadium_pool_alloc_enter(uint32_t size) {
  * This hook captures (s0, s0->unk_28, s0->unk_2C, arg0->unk_090)
  * once on first invocation so we can SEE what's there.
  */
-/* Logs only when the about-to-read address is invalid (NULL or
- * out-of-rdram). Lets us catch the actual crashing call without
- * spamming on every healthy synth frame. */
-void pkmnstadium_audio_diag(uint32_t s0_vaddr, uint32_t s1_vaddr,
+/* If the suspect-data check passes (unk_2C is genuinely invalid),
+ * redirect ctx->r11 to point at a safe zero-fill region so the
+ * synth's lookup reads 0 rather than crashing. Result: that voice
+ * plays as a "rest" for the frame instead of taking the runner
+ * down. Returns the address to use for r11.
+ *
+ * This is NOT a stub — it's data-validation. The synth code reads
+ * memory at a pointer that, in our runtime, contains uninitialized
+ * audio sample bytes pretending to be a struct field. Without the
+ * lazy-resolver running for unk_2C (which it doesn't in this code
+ * path on AREA_SELECT music), the read crashes. Treating "pointer
+ * outside RAM" as "rest" matches what the function does in its
+ * else-branch when tmp == 0x60 (a music-rest note byte).
+ *
+ * Real fix lives in the libnaudio sequence parser — figure out
+ * which call should resolve unk_2C. Until that's understood, this
+ * keeps the runner alive.
+ */
+uint32_t pkmnstadium_audio_safe_ptr(uint32_t unk_2C_field, uint16_t v1_index)
+{
+    uint32_t target = unk_2C_field + (uint32_t)v1_index * 4;
+    int suspect = (target < 0x80000000u) || (target >= 0x80800000u) || (unk_2C_field == 0);
+    if (suspect) {
+        /* Return kseg0 address of rdram[0..3] which is always
+         * readable + readable as zero in our model. */
+        return 0x80000000u;
+    }
+    return unk_2C_field;
+}
+
+/* On suspect (out-of-rdram target), dump the full 0x40 bytes of the
+ * struct at s0 so we can see whether the whole struct is garbage or
+ * just unk_2C. */
+void pkmnstadium_audio_diag(uint8_t* rdram, uint32_t s0_vaddr,
+                             uint32_t s1_vaddr,
                              uint32_t unk_2C_field, uint32_t unk_28_field,
                              uint16_t v1_index)
 {
     uint32_t target = unk_2C_field + (uint32_t)v1_index * 4;
-    /* Valid kseg0 RAM range is roughly [0x80000000, 0x80800000) for
-     * 8 MiB N64 expansion-pak. Anything outside is suspect. */
     int suspect = (target < 0x80000000u) || (target >= 0x80800000u) || (unk_2C_field == 0);
     static __thread int s_n_logged = 0;
     if (!suspect && s_n_logged > 5) return;
@@ -374,7 +403,29 @@ void pkmnstadium_audio_diag(uint32_t s0_vaddr, uint32_t s1_vaddr,
         suspect ? "*** SUSPECT ***" : "ok",
         s0_vaddr, unk_28_field, unk_2C_field,
         (unsigned)v1_index, target);
-    fflush(stderr);
+    if (suspect) {
+        /* Dump 0x40 bytes of the struct + 0x40 of s1 (the parent
+         * unk_D_800FC7D0). XOR-3 byte-order to print BE-as-bytes. */
+        uint32_t paddr = s0_vaddr & 0x1FFFFFFFu;
+        if (paddr + 0x40 < (1u << 30)) {
+            fprintf(stderr, "  [s0 struct dump @ 0x%08X]:", s0_vaddr);
+            for (int i = 0; i < 0x40; i++) {
+                if ((i & 0xF) == 0) fprintf(stderr, "\n    +0x%02X:", i);
+                fprintf(stderr, " %02X", rdram[(paddr + i) ^ 3]);
+            }
+            fprintf(stderr, "\n");
+        }
+        uint32_t s1_paddr = s1_vaddr & 0x1FFFFFFFu;
+        if (s1_paddr + 0x40 < (1u << 30)) {
+            fprintf(stderr, "  [s1 struct dump @ 0x%08X +0x80..0xC0]:", s1_vaddr);
+            for (int i = 0x80; i < 0xC0; i++) {
+                if ((i & 0xF) == 0) fprintf(stderr, "\n    +0x%02X:", i);
+                fprintf(stderr, " %02X", rdram[(s1_paddr + i) ^ 3]);
+            }
+            fprintf(stderr, "\n");
+        }
+        fflush(stderr);
+    }
 }
 
 /* Game_DoCopyProtection diagnostic. Returns -0x10 (= 0xFFFFFFF0)
