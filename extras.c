@@ -706,6 +706,7 @@ void pkmnstadium_cri_exit(uint32_t cur_buttondown_via_cont0_word, uint32_t butto
 extern int32_t recomp_resolve_via_data_context(uint32_t link_vaddr,
                                                   uint32_t data_ctx_addr);
 extern int recomp_addr_in_loaded_variant(uint32_t bucket, uint32_t addr);
+extern int32_t recomp_resolve_synthetic_fragment(uint32_t addr);
 
 static __thread uint32_t s_memmap_get_input_stack[16];
 static __thread int s_memmap_get_sp = 0;
@@ -719,6 +720,27 @@ uint32_t pkmnstadium_memmap_get_exit(uint32_t game_result, uint32_t data_ctx) {
     s_memmap_get_sp--;
     int idx = (s_memmap_get_sp >= 0 && s_memmap_get_sp < 16) ? s_memmap_get_sp : 0;
     uint32_t input = s_memmap_get_input_stack[idx];
+
+    /* Path 2 synthetic resolver (highest priority). If the input is in
+     * the per-variant synthetic-vram pool (0xA0000000..0xC0000000), it
+     * was emitted by a recompiled pattern variant whose section.ram_addr
+     * we assigned a unique synthetic identity. Resolve via the parallel
+     * recomp_synthetic_fragments[] table, bypassing the game's native
+     * gFragments[id] entirely. The native game path returned the input
+     * unchanged here (game_result == input) because the input is outside
+     * the 0x81000000..0x90000000 range the game recognizes — we just
+     * substitute our resolution.
+     *
+     * recomp_resolve_synthetic_fragment aborts deterministically if the
+     * slot is empty. Returning 0 here means "addr wasn't in the
+     * synthetic pool", in which case we fall through to the existing
+     * 0x8FF00000-bucket data-context logic. */
+    {
+        int32_t synth = recomp_resolve_synthetic_fragment(input);
+        if (synth != 0) {
+            return (uint32_t)synth;
+        }
+    }
 
     /* Bounded scope: only the known-ambiguous 0x8FF00000 bucket. */
     if ((input & 0xFFF00000u) != 0x8FF00000u) return game_result;
