@@ -538,6 +538,66 @@ void pkmnstadium_cri_exit(uint32_t cur_buttondown_via_cont0_word, uint32_t butto
     }
 }
 
+/* Memmap_GetFragmentVaddr override using offset-aware lookup.
+ *
+ * The game's Memmap_GetFragmentVaddr resolves fragment-space vaddrs
+ * (0x81000000..0x90000000) against gFragments[id].vaddr — a single
+ * pointer per id that gets clobbered when multiple
+ * decompressed_section_pattern variants share an id (e.g. all
+ * stadium-models pattern fragments at 0x8FF00000 → id 0xEF).
+ *
+ * Per-call result: if a consumer asks for offset 0xABFC of fragment
+ * 0xEF, the game returns gFragments[0xEF].vaddr + 0xABFC even when
+ * the currently-registered variant is too small to contain offset
+ * 0xABFC. The translation lands in stale main_pool bytes, code
+ * reads garbage as data, lookup-misses or memory-faults follow.
+ *
+ * This hook overrides the result if recomp_lookup_fragment_offset
+ * (librecomp side) finds a variant that actually contains the
+ * offset. Falls through to the game's original result when no
+ * better answer exists. Cost: one walk over loaded_sections
+ * per call — small in practice (loaded_sections has ~tens of
+ * entries) and only called when the game itself wants to translate
+ * a fragment vaddr.
+ *
+ * Save input arg at entry (function modifies r4 in place), override
+ * at exit before the delay-slot copies r4 to r2.
+ */
+extern int32_t recomp_lookup_fragment_offset(uint32_t link_vaddr);
+
+static __thread uint32_t s_memmap_get_input_stack[16];
+static __thread int s_memmap_get_sp = 0;
+
+void pkmnstadium_memmap_get_enter(uint32_t input) {
+    if (s_memmap_get_sp < 16) s_memmap_get_input_stack[s_memmap_get_sp] = input;
+    s_memmap_get_sp++;
+}
+
+uint32_t pkmnstadium_memmap_get_exit(uint32_t game_result) {
+    s_memmap_get_sp--;
+    int idx = (s_memmap_get_sp >= 0 && s_memmap_get_sp < 16) ? s_memmap_get_sp : 0;
+    uint32_t input = s_memmap_get_input_stack[idx];
+
+    /* Only intervene for fragment-space inputs. */
+    if (input < 0x81000000u || input >= 0x90000000u) return game_result;
+
+    int32_t override = recomp_lookup_fragment_offset(input);
+    if (override == 0) return game_result;
+    if ((uint32_t)override == game_result) return game_result;
+
+    /* Different answer — log first few then go silent. */
+    static volatile int s_n = 0;
+    int n = __atomic_fetch_add(&s_n, 1, __ATOMIC_RELAXED);
+    if (n < 16) {
+        fprintf(stderr,
+            "[memmap-fix] in=0x%08X game-result=0x%08X "
+            "offset-aware=0x%08X (using offset-aware)\n",
+            input, game_result, (uint32_t)override);
+        fflush(stderr);
+    }
+    return (uint32_t)override;
+}
+
 /* Asset-loader chain diagnostic (ASSET_LOAD2 / func_800044F4
  * / func_8000484C / func_800047C4) — the path that loads
  * stadium_models for fragment62. The autonomous attract-demo
