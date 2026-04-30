@@ -3119,15 +3119,16 @@ func = "func_80010FDC"
 before_vram = 0x80010FDC   # entry
 text = "pkmnstadium_geo_render_call_log((uint32_t)ctx->r4, (uint32_t)ctx->r5, (uint32_t)ctx->r6);"
 
-# Stop libnaudio voices at fragment36 cleanup (right before
-# main_pool_pop_state frees the 1 MiB SoundBank buffer that the
-# synth's unk_090 still points at). Without this, the synth
-# crashes after the state transition reading freed bank memory.
-# func_8004FF20 fires only from fragment36's exit chain.
-[[patches.hook]]
-func = "func_8004FF20"
-before_vram = 0x8004FF20   # entry
-text = "pkmnstadium_audio_stop_voices(rdram);"
+# DISABLED 2026-04-29 (test): voice-stop at fragment36 cleanup may
+# have shifted pool/audio timing such that AREA_SELECT now crashes
+# in process_geo_layout. Originally introduced to fix the audio
+# use-after-free at fragment36 exit (synth reading freed bank).
+# Re-enable if the navigability test confirms the AREA_SELECT
+# crash is independent of voice-stop timing.
+#
+# [[patches.hook]] func = "func_8004FF20"
+#   before_vram = 0x8004FF20
+#   text = "pkmnstadium_audio_stop_voices(rdram);"
 
 # miniEkansInitCam entry diagnostic — auto-attract crashes in
 # miniUpdateCamera writing to D_87906054->unk_24.fovy (NULL+0x2C).
