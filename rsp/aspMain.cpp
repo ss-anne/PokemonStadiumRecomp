@@ -4077,7 +4077,15 @@ L_2044:
     rsp.VMULF<10>(rsp.vpu.r[10], rsp.vpu.r[19], rsp.vpu.r[2]);
     return RspExitReason::ImemOverrun;
 do_indirect_jump:
-    switch ((jump_target | 0x1000) & 0X1FFF) { 
+    switch ((jump_target | 0x1000) & 0X1FFF) {
+        // Audio command-list dispatch: a halfword of 0x0000 in the
+        // command table means "end of list" — the audio task is
+        // done. On real RSP, `jr $0` would land at IMEM[0] which
+        // breaks. Returning Broke matches that semantic and lets
+        // the next queued audio task run cleanly. This case is
+        // hit by Stadium's menu-music tasks that end with a 0
+        // sentinel in the dispatch table.
+        case 0x1000: return RspExitReason::Broke;
         case 0x107C: goto L_107C;
         case 0x2044: goto L_2044;
         case 0x1034: goto L_1034;
