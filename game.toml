@@ -3017,33 +3017,21 @@ func = "func_8003AD58"
 before_vram = 0x8003AF60
 text = "pkmnstadium_audio_diag(rdram, (uint32_t)ctx->r16, (uint32_t)ctx->r17, (uint32_t)ctx->r11, (uint32_t)MEM_W(ctx->r16, 0X28), (uint16_t)ctx->r3);"
 
-# Memmap_GetFragmentVaddr override DISABLED 2026-04-29.
-#
-# Approach: when the game's gFragments[id]-based resolution sends a
-# fragment-vaddr to a variant that doesn't actually cover the
-# requested offset, override with offset-aware lookup against
-# loaded_sections via recomp_lookup_fragment_offset (librecomp
-# side). Function still exposed for future use.
-#
-# Outcome of the experiment: no universal heuristic works.
-#  - "back-to-front, latest first" picked too-large variants for
-#    fragment62's geo_layout calls
-#  - "smallest-fit" regressed fragment17 (intro) which had been
-#    working correctly via the game's native resolution
-# Different consumers (fragment17 vs fragment62 vs ...) expect
-# DIFFERENT variants for the same offset — there's no globally-
-# correct rule without per-call context that we don't have at
-# Memmap_GetFragmentVaddr time.
-#
-# Proper fix likely needs recompile-time literal patching or a
-# different per-variant id assignment at registration time.
-#
-# [[patches.hook]] func = "Memmap_GetFragmentVaddr"
-#   before_vram = 0x800020E0   # entry
-#   text = "pkmnstadium_memmap_get_enter((uint32_t)ctx->r4);"
-# [[patches.hook]] func = "Memmap_GetFragmentVaddr"
-#   before_vram = 0x80002140   # exit
-#   text = "ctx->r4 = pkmnstadium_memmap_get_exit((uint32_t)ctx->r4);"
+# Memmap_GetFragmentVaddr caller-context override.
+# Bounded scope: only intervenes for inputs in 0x8FF00000-range
+# (the known-ambiguous decompressed_section_pattern bucket). Walks
+# the host call stack to find the calling fragment, then asks
+# librecomp's recomp_resolve_fragment_via_caller_pc to resolve the
+# link vaddr against THAT specific variant. Cached per callsite PC.
+[[patches.hook]]
+func = "Memmap_GetFragmentVaddr"
+before_vram = 0x800020E0   # entry — save input arg
+text = "pkmnstadium_memmap_get_enter((uint32_t)ctx->r4);"
+
+[[patches.hook]]
+func = "Memmap_GetFragmentVaddr"
+before_vram = 0x80002140   # exit — override before delay-slot
+text = "ctx->r4 = pkmnstadium_memmap_get_exit((uint32_t)ctx->r4);"
 
 # Asset-loader chain hooks — trace ASSET_LOAD2 (func_800044F4) and
 # its sub-asset getter (func_8000484C / func_800047C4) so we can
@@ -3119,16 +3107,14 @@ func = "func_80010FDC"
 before_vram = 0x80010FDC   # entry
 text = "pkmnstadium_geo_render_call_log((uint32_t)ctx->r4, (uint32_t)ctx->r5, (uint32_t)ctx->r6);"
 
-# DISABLED 2026-04-29 (test): voice-stop at fragment36 cleanup may
-# have shifted pool/audio timing such that AREA_SELECT now crashes
-# in process_geo_layout. Originally introduced to fix the audio
-# use-after-free at fragment36 exit (synth reading freed bank).
-# Re-enable if the navigability test confirms the AREA_SELECT
-# crash is independent of voice-stop timing.
-#
-# [[patches.hook]] func = "func_8004FF20"
-#   before_vram = 0x8004FF20
-#   text = "pkmnstadium_audio_stop_voices(rdram);"
+# Re-enabled 2026-04-29 alongside Memmap_GetFragmentVaddr caller-
+# context override. Voice-stop is needed for audio UAF; the
+# override is the candidate fix for the AREA_SELECT regression
+# that voice-stop's pool-timing shift previously introduced.
+[[patches.hook]]
+func = "func_8004FF20"
+before_vram = 0x8004FF20
+text = "pkmnstadium_audio_stop_voices(rdram);"
 
 # miniEkansInitCam entry diagnostic — auto-attract crashes in
 # miniUpdateCamera writing to D_87906054->unk_24.fovy (NULL+0x2C).

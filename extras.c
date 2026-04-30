@@ -17,6 +17,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef _WIN32
+/* Defined here (top of file) rather than before its sole use site
+ * because <windows.h> typedefs `small` as a macro, which collides
+ * with local variables of the same name elsewhere in this file
+ * (e.g. pkmnstadium_geo_render_call_log's `int small`). Including
+ * up top forces all subsequent code to use renamed locals if
+ * needed; current code uses a non-conflicting name. */
+#  include <windows.h>
+#endif
+
 /* Forward-declare recomp_context — librecomp defines the real one. */
 struct recomp_context;
 typedef struct recomp_context recomp_context;
@@ -538,31 +548,34 @@ void pkmnstadium_cri_exit(uint32_t cur_buttondown_via_cont0_word, uint32_t butto
     }
 }
 
-/* Memmap_GetFragmentVaddr override using offset-aware lookup.
+/* Caller-context-aware Memmap_GetFragmentVaddr override.
  *
- * The game's Memmap_GetFragmentVaddr resolves fragment-space vaddrs
- * (0x81000000..0x90000000) against gFragments[id].vaddr — a single
- * pointer per id that gets clobbered when multiple
- * decompressed_section_pattern variants share an id (e.g. all
- * stadium-models pattern fragments at 0x8FF00000 → id 0xEF).
+ * For ambiguous fragment buckets (currently only 0x8FF00000 — the
+ * decompressed_section_pattern variants for stadium_models), the
+ * game's gFragments[id] resolution is one-pointer-per-id and
+ * silently routes to whichever variant was registered last.
+ * Different consumers (fragment17, fragment62, ...) want different
+ * variants — there's no globally-correct heuristic.
  *
- * Per-call result: if a consumer asks for offset 0xABFC of fragment
- * 0xEF, the game returns gFragments[0xEF].vaddr + 0xABFC even when
- * the currently-registered variant is too small to contain offset
- * 0xABFC. The translation lands in stale main_pool bytes, code
- * reads garbage as data, lookup-misses or memory-faults follow.
+ * This override walks the host call stack to find the calling
+ * fragment, then asks librecomp to resolve the link vaddr against
+ * THAT specific variant. If that succeeds, use the result. Otherwise
+ * fall through to the game's native resolution.
  *
- * This hook overrides the result if recomp_lookup_fragment_offset
- * (librecomp side) finds a variant that actually contains the
- * offset. Falls through to the game's original result when no
- * better answer exists. Cost: one walk over loaded_sections
- * per call — small in practice (loaded_sections has ~tens of
- * entries) and only called when the game itself wants to translate
- * a fragment vaddr.
+ * Bounded scope: only fires for inputs in 0x8FF00000-range (the
+ * known-ambiguous bucket). Other fragment buckets get the game's
+ * native answer untouched.
  *
- * Save input arg at entry (function modifies r4 in place), override
- * at exit before the delay-slot copies r4 to r2.
+ * Cached: callsite host PC → resolved_target. Stack walks are
+ * expensive (~microseconds), but each callsite repeats the same
+ * resolution. Cache it after the first walk.
+ *
+ * Logged: first 32 cache misses get full diagnostic dump (request
+ * vaddr, caller chain, resolved target, candidates). Cache hits
+ * are silent.
  */
+extern int32_t recomp_resolve_fragment_via_caller_pc(uint32_t link_vaddr,
+                                                       uintptr_t caller_pc);
 extern int32_t recomp_lookup_fragment_offset(uint32_t link_vaddr);
 
 static __thread uint32_t s_memmap_get_input_stack[16];
@@ -573,29 +586,104 @@ void pkmnstadium_memmap_get_enter(uint32_t input) {
     s_memmap_get_sp++;
 }
 
+/* Cache: callsite host PC → (input, resolved_target). */
+#define MEMMAP_CACHE_CAP 256
+typedef struct {
+    uintptr_t callsite_pc;
+    uint32_t  input;
+    uint32_t  resolved;
+} memmap_cache_entry;
+static memmap_cache_entry s_memmap_cache[MEMMAP_CACHE_CAP];
+static volatile int s_memmap_cache_n = 0;
+
+static int memmap_cache_lookup(uintptr_t callsite_pc, uint32_t input,
+                                uint32_t* out_resolved) {
+    int n = __atomic_load_n(&s_memmap_cache_n, __ATOMIC_RELAXED);
+    if (n > MEMMAP_CACHE_CAP) n = MEMMAP_CACHE_CAP;
+    for (int i = 0; i < n; i++) {
+        if (s_memmap_cache[i].callsite_pc == callsite_pc &&
+            s_memmap_cache[i].input == input) {
+            *out_resolved = s_memmap_cache[i].resolved;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void memmap_cache_insert(uintptr_t callsite_pc, uint32_t input,
+                                  uint32_t resolved) {
+    int idx = __atomic_fetch_add(&s_memmap_cache_n, 1, __ATOMIC_RELAXED);
+    if (idx < MEMMAP_CACHE_CAP) {
+        s_memmap_cache[idx].callsite_pc = callsite_pc;
+        s_memmap_cache[idx].input = input;
+        s_memmap_cache[idx].resolved = resolved;
+    }
+}
+
 uint32_t pkmnstadium_memmap_get_exit(uint32_t game_result) {
     s_memmap_get_sp--;
     int idx = (s_memmap_get_sp >= 0 && s_memmap_get_sp < 16) ? s_memmap_get_sp : 0;
     uint32_t input = s_memmap_get_input_stack[idx];
 
-    /* Only intervene for fragment-space inputs. */
+    /* Bounded scope: only the known-ambiguous 0x8FF00000 bucket. */
+    if ((input & 0xFFF00000u) != 0x8FF00000u) return game_result;
     if (input < 0x81000000u || input >= 0x90000000u) return game_result;
 
-    int32_t override = recomp_lookup_fragment_offset(input);
-    if (override == 0) return game_result;
-    if ((uint32_t)override == game_result) return game_result;
+#ifdef _WIN32
+    /* Stack walk. Don't skip; we'll log every frame and see which one(s)
+     * map to a registered section. */
+    void* frames[24];
+    USHORT n_frames = CaptureStackBackTrace(0, 24, frames, NULL);
+    if (n_frames == 0) return game_result;
+    uintptr_t callsite_pc = (uintptr_t)frames[0];
 
-    /* Different answer — log first few then go silent. */
-    static volatile int s_n = 0;
-    int n = __atomic_fetch_add(&s_n, 1, __ATOMIC_RELAXED);
-    if (n < 16) {
+    /* Cache check first. */
+    uint32_t cached;
+    if (memmap_cache_lookup(callsite_pc, input, &cached)) {
+        return cached ? cached : game_result;
+    }
+
+    /* Walk frames looking for a fragment-resident PC. */
+    int32_t resolved = 0;
+    uintptr_t resolved_at_pc = 0;
+    int resolved_frame_idx = -1;
+    for (USHORT i = 0; i < n_frames; i++) {
+        uintptr_t pc = (uintptr_t)frames[i];
+        int32_t r = recomp_resolve_fragment_via_caller_pc(input, pc);
+        if (r != 0) {
+            resolved = r;
+            resolved_at_pc = pc;
+            resolved_frame_idx = i;
+            break;
+        }
+    }
+
+    /* Log first N misses to stderr for validation. Dump all frames so
+     * we can see what's on the stack and tune skip behavior. */
+    static volatile int s_n_logged = 0;
+    int log_idx = __atomic_fetch_add(&s_n_logged, 1, __ATOMIC_RELAXED);
+    if (log_idx < 8) {
         fprintf(stderr,
-            "[memmap-fix] in=0x%08X game-result=0x%08X "
-            "offset-aware=0x%08X (using offset-aware)\n",
-            input, game_result, (uint32_t)override);
+            "[memmap-ctx] in=0x%08X game-result=0x%08X "
+            "n_frames=%u resolved=0x%08X resolved_at_idx=%d\n",
+            input, game_result, n_frames, (uint32_t)resolved,
+            resolved_frame_idx);
+        for (USHORT i = 0; i < n_frames && i < 12; i++) {
+            fprintf(stderr, "  frame[%u] pc=%p\n", i, frames[i]);
+        }
         fflush(stderr);
     }
-    return (uint32_t)override;
+
+    /* Cache the answer (resolved if found, else 0 marker for "fall through"). */
+    memmap_cache_insert(callsite_pc, input,
+        resolved != 0 ? (uint32_t)resolved : 0);
+
+    if (resolved != 0) return (uint32_t)resolved;
+#else
+    (void)input;
+#endif
+
+    return game_result;
 }
 
 /* Asset-loader chain diagnostic (ASSET_LOAD2 / func_800044F4
@@ -789,13 +877,13 @@ void pkmnstadium_geo_render_call_log(uint32_t arg0_node, uint32_t arg1_seg,
     s_n++;
     /* Log first 16 calls + any whose input is "small" (likely to
      * translate to a near-NULL function pointer). */
-    int small = (arg1_seg != 0 && arg1_seg < 0x80000000u) &&
-                ((arg1_seg & 0xFF000000u) == 0);
-    if (s_n <= 16 || small) {
+    int low_addr = (arg1_seg != 0 && arg1_seg < 0x80000000u) &&
+                   ((arg1_seg & 0xFF000000u) == 0);
+    if (s_n <= 16 || low_addr) {
         fprintf(stderr,
             "[geo-render] #%d node=0x%08X arg1(seg)=0x%08X arg2=0x%08X%s\n",
             s_n, arg0_node, arg1_seg, arg2_data,
-            small ? " <-- SUSPECT (low addr)" : "");
+            low_addr ? " <-- SUSPECT (low addr)" : "");
         fflush(stderr);
     }
 }
