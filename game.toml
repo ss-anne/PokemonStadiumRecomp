@@ -2978,3 +2978,27 @@ text = "pkmnstadium_cri_enter(0);"
 func = "func_82100C98"
 before_vram = 0x82100DAC   # right before jr — $v0 already loaded
 text = "pkmnstadium_frag36_exit(ctx->r2);"
+
+# Workaround: force the fade-out "done" byte to 1 at func_82100B1C
+# entry so the wait loop exits immediately. Real fix is to make the
+# gfx scheduler tick the fade-progress counter. See extras.c.
+[[patches.hook]]
+func = "func_82100B1C"
+before_vram = 0x82100B1C   # entry
+text = "pkmnstadium_force_fade_done(rdram);"
+
+# Direct workaround: hook func_80007604's exit (right before jr) and
+# force return value to 1. This makes ANY caller that uses it as a
+# "transition done?" check see "yes done" immediately. Targets
+# fragment36's title-exit wait loop.
+[[patches.hook]]
+func = "func_80007604"
+before_vram = 0x8000760C   # before jr
+text = "ctx->r2 = pkmnstadium_force_80007604_ret((uint32_t)ctx->r2);"
+
+# Override at the caller side: after func_82100B1C calls func_80007604,
+# force the result to 1 so the wait-for-fade-done loop exits.
+[[patches.hook]]
+func = "func_82100B1C"
+before_vram = 0x82100B58   # right after func_80007604 returns; forces ctx->r2 = 1
+text = "ctx->r2 = 1;"

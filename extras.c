@@ -367,6 +367,49 @@ void pkmnstadium_cri_exit(uint32_t cur_buttondown_via_cont0_word, uint32_t butto
 }
 
 /* Log fragment36's main-entry return value (= next gCurrentGameState). */
+/* Workaround: fragment36's exit cleanup func_82100B1C waits for the
+ * gfx scheduler to flip the "fade-out done" byte at *(0x800A7464)+0x11
+ * to 1. Our gfx scheduler doesn't tick that flag, so the wait spins
+ * forever. Force the byte to 1 right after the transition kickoff
+ * (func_80006CB4) so the next-iteration wait passes.
+ *
+ * This is a temporary skip. Real fix should make the renderer's
+ * fade pipeline tick that counter normally.
+ */
+/* Helper for func_80007604 hook: log first few calls + force ret=1. */
+uint32_t pkmnstadium_force_80007604_ret(uint32_t was) {
+    static __thread int s_n = 0;
+    s_n++;
+    if (s_n <= 3 || (s_n & 4095) == 0) {
+        fprintf(stderr, "[80007604] call#%d (was %u) -> forced 1\n", s_n, was);
+        fflush(stderr);
+    }
+    return 1;
+}
+
+void pkmnstadium_force_fade_done(uint8_t* rdram) {
+    /* MEM_W reads pointer at 0x800A7464 (paddr 0xA7464), with XOR-3 byte order. */
+    uint32_t paddr_ptr = 0x000A7464u;
+    uint32_t struct_ptr =
+        ((uint32_t)rdram[(paddr_ptr + 0) ^ 3] << 24) |
+        ((uint32_t)rdram[(paddr_ptr + 1) ^ 3] << 16) |
+        ((uint32_t)rdram[(paddr_ptr + 2) ^ 3] <<  8) |
+        ((uint32_t)rdram[(paddr_ptr + 3) ^ 3]);
+    if (struct_ptr == 0) return;
+    /* struct_ptr is a kseg0 vaddr; convert to paddr for our rdram array. */
+    uint32_t struct_paddr = struct_ptr & 0x1FFFFFFFu;
+    /* Byte at offset +0x11. With XOR-3 storage, write to (paddr+0x11)^3 = paddr+0x12. */
+    rdram[(struct_paddr + 0x11) ^ 3] = 1;
+    static int s_logged = 0;
+    if (!s_logged) {
+        s_logged = 1;
+        fprintf(stderr,
+            "[fade] forced *(0x%08X+0x11) = 1 to bypass title-exit "
+            "fade-out wait loop\n", struct_ptr);
+        fflush(stderr);
+    }
+}
+
 void pkmnstadium_frag36_exit(uint32_t v0) {
     fprintf(stderr, "[frag36] EXIT — return value (next state) = 0x%X\n", v0);
     fflush(stderr);
