@@ -27,6 +27,9 @@
 #define NOMINMAX
 #include <winsock2.h>
 #include <windows.h>
+#include <dbghelp.h>
+#include <tlhelp32.h>
+#pragma comment(lib, "dbghelp.lib")
 
 #include <algorithm>
 #include <atomic>
@@ -686,6 +689,78 @@ static std::string handle_command(const std::string& line) {
         }
         out += R"("})";
         return out;
+    }
+    if (cmd == "dump_threads") {
+        // Walk every OS thread in this process, capture its host call
+        // stack, symbolize, and write it to last_error.log. Lets us
+        // diagnose deep stalls (e.g. attract demo blocked in an
+        // OSMesgQueue wait) without having to instrument every libultra
+        // primitive.
+        FILE* f = fopen("F:/Projects/PokemonStadiumRecomp/build/last_error.log", "a");
+        if (!f) return R"({"ok":false,"error":"could not open log"})";
+        fprintf(f, "\n=== dump_threads ===\n");
+
+        HANDLE proc = GetCurrentProcess();
+        SymInitialize(proc, NULL, TRUE);
+
+        DWORD self_pid = GetCurrentProcessId();
+        DWORD self_tid = GetCurrentThreadId();
+        HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+        int n_threads = 0;
+        if (snap != INVALID_HANDLE_VALUE) {
+            THREADENTRY32 te{};
+            te.dwSize = sizeof(te);
+            if (Thread32First(snap, &te)) {
+                do {
+                    if (te.th32OwnerProcessID != self_pid) continue;
+                    if (te.th32ThreadID == self_tid) continue;  // skip caller
+                    HANDLE th = OpenThread(
+                        THREAD_GET_CONTEXT | THREAD_SUSPEND_RESUME |
+                        THREAD_QUERY_INFORMATION, FALSE, te.th32ThreadID);
+                    if (!th) continue;
+                    SuspendThread(th);
+                    CONTEXT ctx{};
+                    ctx.ContextFlags = CONTEXT_FULL;
+                    if (GetThreadContext(th, &ctx)) {
+                        fprintf(f, "\n[thread %lu]\n", te.th32ThreadID);
+                        STACKFRAME64 frame{};
+                        frame.AddrPC.Offset    = ctx.Rip; frame.AddrPC.Mode    = AddrModeFlat;
+                        frame.AddrFrame.Offset = ctx.Rbp; frame.AddrFrame.Mode = AddrModeFlat;
+                        frame.AddrStack.Offset = ctx.Rsp; frame.AddrStack.Mode = AddrModeFlat;
+                        char symbuf[sizeof(SYMBOL_INFO) + 256];
+                        SYMBOL_INFO* sym = (SYMBOL_INFO*)symbuf;
+                        sym->SizeOfStruct = sizeof(SYMBOL_INFO);
+                        sym->MaxNameLen = 255;
+                        IMAGEHLP_LINE64 line{}; line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+                        for (int i = 0; i < 24; i++) {
+                            if (!StackWalk64(IMAGE_FILE_MACHINE_AMD64, proc, th,
+                                             &frame, &ctx, NULL,
+                                             SymFunctionTableAccess64,
+                                             SymGetModuleBase64, NULL)) break;
+                            if (!frame.AddrPC.Offset) break;
+                            DWORD64 disp64 = 0; DWORD disp32 = 0;
+                            const char* name = "?"; const char* file = "?"; DWORD lineno = 0;
+                            if (SymFromAddr(proc, frame.AddrPC.Offset, &disp64, sym)) name = sym->Name;
+                            if (SymGetLineFromAddr64(proc, frame.AddrPC.Offset, &disp32, &line)) {
+                                file = line.FileName; lineno = line.LineNumber;
+                            }
+                            fprintf(f, "  #%02d 0x%016llX %s (%s:%lu)\n",
+                                i, (unsigned long long)frame.AddrPC.Offset,
+                                name, file, lineno);
+                        }
+                        n_threads++;
+                    }
+                    ResumeThread(th);
+                    CloseHandle(th);
+                } while (Thread32Next(snap, &te));
+            }
+            CloseHandle(snap);
+        }
+        fprintf(f, "\n=== dump_threads end (%d threads) ===\n", n_threads);
+        fclose(f);
+        char buf[64];
+        std::snprintf(buf, sizeof(buf), R"({"ok":true,"threads":%d})", n_threads);
+        return buf;
     }
     if (cmd == "quit") {
         ExitProcess(0);  // hard exit — debug-driven shutdown

@@ -740,9 +740,20 @@ uint32_t pkmnstadium_memmap_get_exit(uint32_t game_result) {
     int idx = (s_memmap_get_sp >= 0 && s_memmap_get_sp < 16) ? s_memmap_get_sp : 0;
     uint32_t input = s_memmap_get_input_stack[idx];
 
-    /* Bounded scope: only the known-ambiguous 0x8FF00000 bucket. */
+    /* Bounded scope: only the known-ambiguous 0x8FF00000 bucket
+     * AND only when the game's own resolution failed (returned the
+     * input as a passthrough, meaning gFragments[0xEF] was unset OR
+     * the offset was outside the registered variant). If the game
+     * gave us a real RAM address, USE IT — overriding then would
+     * regress geo data that was correctly resolved.
+     *
+     * Symptom of over-broad override: branch_and_link geo cmd reads
+     * a target literal that the game ALREADY translated correctly,
+     * we re-translate it to a different variant, and the loop
+     * recurses infinitely. */
     if ((input & 0xFFF00000u) != 0x8FF00000u) return game_result;
     if (input < 0x81000000u || input >= 0x90000000u) return game_result;
+    if (game_result != input) return game_result;  /* game resolved successfully */
 
 #ifdef _WIN32
     /* Stack walk. Don't skip; we'll log every frame and see which one(s)
