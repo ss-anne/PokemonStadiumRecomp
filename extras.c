@@ -1008,21 +1008,43 @@ void pkmnstadium_geo_entry_log(void* rdram, uint32_t pool_arg, uint32_t segptr) 
         }
     }
 #ifdef _WIN32
-    /* For NULL segptr (the white-screen attract bug), capture a
-     * host backtrace so we can identify which caller is passing
-     * NULL geo-data. */
-    if (segptr == 0) {
+    /* Capture a host backtrace for two cases:
+     *   (a) NULL segptr — white-screen attract bug.
+     *   (b) Pattern-bucket segptr (0x8FF0XXXX) — Bug 1 origin trace.
+     * Backtrace identifies the caller of process_geo_layout that
+     * passed the bad segptr; the recompiled C function name maps
+     * to a MIPS function via funcs_NN.c, and the line number
+     * resolves to a `// 0x...:` comment with the originating
+     * MIPS PC. One-shot per unique segptr (re-using s_probed). */
+    int do_bt = (segptr == 0);
+    if ((segptr & 0xFFF00000u) == 0x8FF00000u &&
+        segptr >= 0x81000000u && segptr < 0x90000000u) {
+        static uint32_t s_bt_done[32] = {0};
+        static int s_bt_n = 0;
+        int seen = 0;
+        for (int i = 0; i < s_bt_n && i < 32; i++) {
+            if (s_bt_done[i] == segptr) { seen = 1; break; }
+        }
+        if (!seen && s_bt_n < 32) {
+            s_bt_done[s_bt_n++] = segptr;
+            do_bt = 1;
+        }
+    }
+    if (do_bt) {
+        fprintf(stderr,
+            "[geo-entry-origin] segptr=0x%08X pool=0x%08X — host backtrace:\n",
+            segptr, pool_arg);
         HANDLE proc = GetCurrentProcess();
         SymInitialize(proc, NULL, TRUE);
-        void* frames[16];
-        USHORT n = CaptureStackBackTrace(0, 16, frames, NULL);
+        void* frames[24];
+        USHORT n = CaptureStackBackTrace(0, 24, frames, NULL);
         char symbuf[sizeof(SYMBOL_INFO) + 256];
         SYMBOL_INFO* sym = (SYMBOL_INFO*)symbuf;
         sym->SizeOfStruct = sizeof(SYMBOL_INFO);
         sym->MaxNameLen = 255;
         IMAGEHLP_LINE64 line; memset(&line, 0, sizeof(line));
         line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
-        for (USHORT i = 0; i < n && i < 12; i++) {
+        for (USHORT i = 0; i < n && i < 18; i++) {
             DWORD64 disp64 = 0; DWORD disp32 = 0;
             const char* name = "?"; const char* file = "?"; DWORD lineno = 0;
             if (SymFromAddr(proc, (DWORD64)frames[i], &disp64, sym)) name = sym->Name;
@@ -1088,7 +1110,10 @@ void pkmnstadium_geo_dispatch_log(uint8_t* rdram, uint32_t cmd_byte,
  * once per unique input. Builds a per-literal report of which
  * variant fragment62 (or any other caller) actually wants. */
 void pkmnstadium_addr_translate_log(void* rdram, uint32_t in, uint32_t out) {
-    /* Option C census: any 0x8FF0XXXX input gets one-shot probed. */
+    /* Option C census: any 0x8FF0XXXX input gets one-shot probed.
+     * Bug 1 origin trace: ALSO dump a host backtrace for the first
+     * occurrence so we can identify the recompiled C function (and
+     * thus the originating MIPS PC) that produced the literal. */
     if ((in & 0xFFF00000u) == 0x8FF00000u &&
         in >= 0x81000000u && in < 0x90000000u) {
         static uint32_t s_probed[64] = {0};
@@ -1103,6 +1128,39 @@ void pkmnstadium_addr_translate_log(void* rdram, uint32_t in, uint32_t out) {
             const uint32_t offset = in & 0x000FFFFFu;
             recomp_diag_dump_variant_candidates_for_offset(
                 rdram, pattern_id, offset);
+#ifdef _WIN32
+            /* Bug 1 origin trace: identify the recompiled C function
+             * (and thus the MIPS handler) that called
+             * Util_ConvertAddrToVirtAddr with this segptr. The frame
+             * directly above this hook is Util_ConvertAddrToVirtAddr
+             * itself; the next frame up is the recompiled caller —
+             * its name maps to a MIPS function via funcs_NN.c, and
+             * the line number resolves to a `// 0x...:` comment with
+             * the originating MIPS PC. */
+            fprintf(stderr,
+                "[addr-xlate-origin] in=0x%08X (pattern_id=0x%X off=0x%X) "
+                "host backtrace:\n", in, pattern_id, offset);
+            HANDLE proc = GetCurrentProcess();
+            SymInitialize(proc, NULL, TRUE);
+            void* frames[24];
+            USHORT n = CaptureStackBackTrace(0, 24, frames, NULL);
+            char symbuf[sizeof(SYMBOL_INFO) + 256];
+            SYMBOL_INFO* sym = (SYMBOL_INFO*)symbuf;
+            sym->SizeOfStruct = sizeof(SYMBOL_INFO);
+            sym->MaxNameLen = 255;
+            IMAGEHLP_LINE64 line; memset(&line, 0, sizeof(line));
+            line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+            for (USHORT i = 0; i < n && i < 18; i++) {
+                DWORD64 disp64 = 0; DWORD disp32 = 0;
+                const char* name = "?"; const char* file = "?"; DWORD lineno = 0;
+                if (SymFromAddr(proc, (DWORD64)frames[i], &disp64, sym)) name = sym->Name;
+                if (SymGetLineFromAddr64(proc, (DWORD64)frames[i], &disp32, &line)) {
+                    file = line.FileName; lineno = line.LineNumber;
+                }
+                fprintf(stderr, "  #%02u %s (%s:%lu)\n", i, name, file, lineno);
+            }
+            fflush(stderr);
+#endif
         }
     }
 
