@@ -94,6 +94,13 @@ static SOCKET             s_listen_sock = INVALID_SOCKET;
 // re-queues, which happen when a target OSMesgQueue is full when the
 // drain pass reaches it. Surfaced via debug_server's `status` cmd.
 extern "C" uint64_t ultramodern_external_requeues(void);
+extern "C" void ultramodern_mesg_recent_copy(
+    void* out_void, size_t cap, size_t* n_written, uint64_t* next_seq_out);
+extern "C" size_t ultramodern_mesg_event_size(void);
+extern "C" uint64_t ultramodern_submit_gfx_count(void);
+extern "C" uint64_t ultramodern_submit_audio_count(void);
+extern "C" uint64_t ultramodern_submit_other_count(void);
+extern "C" void psr_post_mortem_dump(const char* reason, void* fault_info);
 
 // Map button name → N64 contStat bit.
 static uint16_t button_bit(const std::string& n) {
@@ -188,7 +195,8 @@ static std::string handle_command(const std::string& line) {
         std::snprintf(buf, sizeof(buf),
             "{\"ok\":true,\"frame\":%llu,\"vi\":%llu,\"fast_forward\":%s,\"input_override\":%s,\"buttons\":%u,\"sx\":%d,\"sy\":%d,"
             "\"send_dl\":%llu,\"send_dl_gfx\":%llu,\"send_dl_audio\":%llu,\"send_dl_other\":%llu,\"update_screen\":%llu,"
-            "\"external_requeues\":%llu}",
+            "\"external_requeues\":%llu,"
+            "\"submit_gfx\":%llu,\"submit_audio\":%llu,\"submit_other\":%llu}",
             (unsigned long long)g_frame_count.load(),
             (unsigned long long)g_vi_ticks.load(),
             g_fast_forward.load() ? "true" : "false",
@@ -201,7 +209,10 @@ static std::string handle_command(const std::string& line) {
             (unsigned long long)g_send_dl_audio_count.load(),
             (unsigned long long)g_send_dl_other_count.load(),
             (unsigned long long)g_update_screen_count.load(),
-            (unsigned long long)ultramodern_external_requeues()
+            (unsigned long long)ultramodern_external_requeues(),
+            (unsigned long long)ultramodern_submit_gfx_count(),
+            (unsigned long long)ultramodern_submit_audio_count(),
+            (unsigned long long)ultramodern_submit_other_count()
         );
         return buf;
     }
@@ -326,6 +337,65 @@ static std::string handle_command(const std::string& line) {
             out += "\"";
             out += (name ? name : "?");
             out += "\"";
+        }
+        out += "]}";
+        return out;
+    }
+    if (cmd == "post_mortem_dump") {
+        // On-demand dump — runner stays alive. Produces
+        // build/last_run_report.json with status + rings + hardware
+        // state + per-thread host stacks. Use this to inspect
+        // softlocks (white-screen freezes) without restarting.
+        psr_post_mortem_dump("on_demand", nullptr);
+        return R"({"ok":true,"path":"build/last_run_report.json"})";
+    }
+    if (cmd == "mesg_recent") {
+        // Returns the last N OSMesgQueue events from the always-on
+        // ring in ultramodern. Used to diagnose softlocks where the
+        // game thread blocks on a queue waiting for a completion msg
+        // that didn't arrive.
+        struct MesgEvent {
+            uint64_t seq;
+            uint64_t ms;
+            uint32_t mq;
+            uint32_t msg;
+            uint16_t valid_before;
+            uint16_t valid_after;
+            uint8_t  op;
+            uint8_t  block;
+            uint8_t  game_thread;
+            uint8_t  pad;
+        };
+        if (ultramodern_mesg_event_size() != sizeof(MesgEvent)) {
+            return R"({"ok":false,"error":"mesg event size mismatch"})";
+        }
+        int n = get_int(line, "n", 128);
+        if (n < 1) n = 1;
+        if (n > 1024) n = 1024;
+        std::vector<MesgEvent> buf(n);
+        size_t got = 0;
+        uint64_t widx = 0;
+        ultramodern_mesg_recent_copy(buf.data(), buf.size(), &got, &widx);
+        const char* op_names[9] = {
+            "?", "send_game", "send_external", "recv_enter",
+            "recv_block", "recv_return_ok", "ext_deq_ok", "ext_deq_full",
+            "do_send_block"
+        };
+        std::string out = R"({"ok":true,"write_idx":)" + std::to_string(widx)
+                        + R"(,"events":[)";
+        for (size_t i = 0; i < got; i++) {
+            const auto& e = buf[i];
+            const char* opn = (e.op < 9) ? op_names[e.op] : "?";
+            char b[256];
+            std::snprintf(b, sizeof(b),
+                "%s{\"seq\":%llu,\"ms\":%llu,\"op\":\"%s\",\"mq\":%u,"
+                "\"msg\":%u,\"vb\":%u,\"va\":%u,\"block\":%u,\"gt\":%u}",
+                (i ? "," : ""),
+                (unsigned long long)e.seq, (unsigned long long)e.ms,
+                opn, e.mq, e.msg,
+                (unsigned)e.valid_before, (unsigned)e.valid_after,
+                (unsigned)e.block, (unsigned)e.game_thread);
+            out += b;
         }
         out += "]}";
         return out;

@@ -514,7 +514,17 @@ extern "C" const char* pkmnstadium_trace_at(uint64_t idx);
 extern "C" uint64_t pkmnstadium_trace_write_idx(void);
 extern "C" uint32_t pkmnstadium_trace_capacity(void);
 
+// Forward decl — defined in post_mortem.cpp.
+extern "C" void psr_post_mortem_dump(const char* reason,
+                                     EXCEPTION_POINTERS* fault_info);
+
 static LONG WINAPI psr_crash_filter(EXCEPTION_POINTERS* info) {
+    // Unified post-mortem dump first (writes build/last_run_report.json).
+    // The legacy last_error.log path below is preserved for back-compat
+    // with existing tooling; remove it once everything reads
+    // last_run_report.json.
+    psr_post_mortem_dump("seh", info);
+
     FILE* f = fopen("F:/Projects/PokemonStadiumRecomp/build/last_error.log", "a");
     if (f) {
         fprintf(f, "\n=== UNHANDLED EXCEPTION ===\n");
@@ -625,6 +635,9 @@ int main(int argc, char** argv) {
     // so the process exits immediately into our handler.
     SetUnhandledExceptionFilter(psr_crash_filter);
     SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+    // Also dump on clean exit so last_run_report.json reflects the
+    // final state regardless of how the runner exited.
+    std::atexit([]() { psr_post_mortem_dump("atexit", nullptr); });
 #endif
 
 #ifdef _WIN32
@@ -646,6 +659,29 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "[PSR] master volume defaulting to 0 (muted). "
             "Set PSR_VOLUME=1.0 to unmute, or use TCP `set_volume`.\n");
     }
+
+    // PSR_TURBO env var: turbo (fast-forward) on by default while we're
+    // chasing softlocks; flip off with PSR_TURBO=0 for real-time
+    // playback. Reproducing attract takes ~1/4 the wallclock time
+    // with turbo on.
+    bool turbo_default = true;
+    if (const char* turbo_env = std::getenv("PSR_TURBO")) {
+        // Accept 0/1, false/true, off/on (case-insensitive first char).
+        char c = turbo_env[0];
+        if (c == '0' || c == 'f' || c == 'F' || c == 'n' || c == 'N' ||
+            c == 'o' || c == 'O') {
+            // distinguish "off" from "on" by second char if first is 'o'/'O'.
+            turbo_default = !(c == '0' || c == 'f' || c == 'F' || c == 'n' || c == 'N'
+                || (turbo_env[1] == 'f' || turbo_env[1] == 'F'));
+        } else {
+            turbo_default = true;
+        }
+    }
+    pkmnstadium::dbg::g_fast_forward.store(turbo_default);
+    std::fprintf(stderr, "[PSR] PSR_TURBO=%s -> turbo %s "
+                 "(toggle via TCP `fast_forward`)\n",
+                 std::getenv("PSR_TURBO") ? std::getenv("PSR_TURBO") : "(unset)",
+                 turbo_default ? "ON" : "off");
     std::fflush(stderr);
 
     SDL_InitSubSystem(SDL_INIT_AUDIO | SDL_INIT_GAMECONTROLLER);

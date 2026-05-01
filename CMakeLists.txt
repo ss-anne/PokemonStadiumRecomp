@@ -66,6 +66,7 @@ target_sources(RecompiledFuncs PRIVATE ${FUNC_C_SOURCES})
 # ---- Runner executable ------------------------------------------------------
 add_executable(PokemonStadiumRecomp
     src/main/main.cpp
+    src/main/post_mortem.cpp
     src/main/rt64_render_context.cpp
     src/main/debug_server.cpp
     src/main/ares_worker.cpp
