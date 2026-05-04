@@ -1,0 +1,698 @@
+/*
+ * debug_server.cpp — Minimal TCP debug server for PokemonStadiumRecomp.
+ *
+ * Modeled after nesrecomp's runner/src/debug_server.c (per
+ * F:\Projects\recomp-template\NES\TCP.md). Default port 4370,
+ * single-client, JSON line protocol.
+ *
+ * Commands implemented for first-pass visibility:
+ *
+ *   ping                         → {"ok":true,"pong":true}
+ *   status                       → frame counter, vi count, fast_forward state, errors
+ *   set_button {name, down}      → simulate controller button press
+ *   set_stick {x, y}             → analog stick override (-128..127)
+ *   clear_input                  → drop overrides
+ *   fast_forward {on}            → flip fast-forward state
+ *   enable_instant_present       → tell the renderer to skip vsync
+ *   screenshot {path}            → ask the renderer to dump the next framebuffer
+ *   tail_errlog                  → returns last_error.log content (post-mortem inspection)
+ *   quit                         → exit cleanly
+ *
+ * Per project principles (F:\Projects\recomp-template\NES\TCP.md):
+ * any state we want visible from outside grows TCP commands here.
+ * Don't add side-channel logging.
+ */
+
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <winsock2.h>
+#include <windows.h>
+
+#include <algorithm>
+#include <atomic>
+#include <cstdio>
+#include <cstring>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <vector>
+
+#include "debug_server.h"
+#include "librecomp/ultra_trace.hpp"
+#include "librecomp/rsp.hpp"
+#include "ares_bridge.h"
+#include "ares_worker.h"
+
+#pragma comment(lib, "ws2_32.lib")
+
+// Function-trace ring queries (definitions in extras.c).
+extern "C" {
+    uint64_t pkmnstadium_trace_write_idx(void);
+    const char* pkmnstadium_trace_at(uint64_t idx);
+    uint32_t pkmnstadium_trace_capacity(void);
+}
+
+namespace pkmnstadium {
+namespace dbg {
+
+// ---- Public state polled by the runner each frame --------------------------
+std::atomic<bool>     g_fast_forward{false};
+std::atomic<bool>     g_enable_instant_present_request{false};
+std::atomic<uint64_t> g_vi_ticks{0};
+std::atomic<uint64_t> g_frame_count{0};
+
+// Button override surface (controller 0). When `g_input_override_active` is
+// true, the runner uses these in place of SDL polling.
+std::atomic<bool>     g_input_override_active{false};
+std::atomic<uint16_t> g_buttons_override{0};
+std::atomic<int>      g_stick_x_override{0};  // -128..127
+std::atomic<int>      g_stick_y_override{0};
+
+std::atomic<uint64_t> g_send_dl_count{0};
+std::atomic<uint64_t> g_update_screen_count{0};
+std::atomic<uint64_t> g_send_dl_audio_count{0};
+std::atomic<uint64_t> g_send_dl_gfx_count{0};
+std::atomic<uint64_t> g_send_dl_other_count{0};
+
+// ---- Internals -------------------------------------------------------------
+static std::thread        s_thread;
+static std::atomic<bool>  s_running{false};
+static SOCKET             s_listen_sock = INVALID_SOCKET;
+
+// Surfaced from librecomp's mesgqueue.cpp — counts external-message
+// re-queues, which happen when a target OSMesgQueue is full when the
+// drain pass reaches it. Surfaced via debug_server's `status` cmd.
+extern "C" uint64_t ultramodern_external_requeues(void);
+
+// Map button name → N64 contStat bit.
+static uint16_t button_bit(const std::string& n) {
+    if (n == "A")        return 0x8000;
+    if (n == "B")        return 0x4000;
+    if (n == "Z")        return 0x2000;
+    if (n == "Start")    return 0x1000;
+    if (n == "DUp")      return 0x0800;
+    if (n == "DDown")    return 0x0400;
+    if (n == "DLeft")    return 0x0200;
+    if (n == "DRight")   return 0x0100;
+    if (n == "L")        return 0x0020;
+    if (n == "R")        return 0x0010;
+    if (n == "CUp")      return 0x0008;
+    if (n == "CDown")    return 0x0004;
+    if (n == "CLeft")    return 0x0002;
+    if (n == "CRight")   return 0x0001;
+    return 0;
+}
+
+// Crude JSON value extraction — enough for our small command surface.
+// We do not pull in a JSON library to avoid one more dep.
+static std::string get_str(const std::string& body, const char* key) {
+    std::string needle = std::string("\"") + key + "\"";
+    size_t k = body.find(needle);
+    if (k == std::string::npos) return {};
+    size_t colon = body.find(':', k);
+    if (colon == std::string::npos) return {};
+    size_t qa = body.find('"', colon);
+    if (qa == std::string::npos) return {};
+    size_t qb = body.find('"', qa + 1);
+    if (qb == std::string::npos) return {};
+    return body.substr(qa + 1, qb - qa - 1);
+}
+
+static int get_int(const std::string& body, const char* key, int dflt) {
+    std::string needle = std::string("\"") + key + "\"";
+    size_t k = body.find(needle);
+    if (k == std::string::npos) return dflt;
+    size_t colon = body.find(':', k);
+    if (colon == std::string::npos) return dflt;
+    return std::atoi(body.c_str() + colon + 1);
+}
+
+// Same as get_int but parses an unsigned 32-bit value. atoi
+// overflows on values >= 0x80000000 (e.g. K0/K1 N64 vaddrs); use
+// strtoul to keep the full unsigned range.
+static uint32_t get_uint(const std::string& body, const char* key, uint32_t dflt) {
+    std::string needle = std::string("\"") + key + "\"";
+    size_t k = body.find(needle);
+    if (k == std::string::npos) return dflt;
+    size_t colon = body.find(':', k);
+    if (colon == std::string::npos) return dflt;
+    const char* p = body.c_str() + colon + 1;
+    while (*p == ' ' || *p == '\t') p++;
+    return (uint32_t)std::strtoul(p, nullptr, 0);
+}
+
+static bool get_bool(const std::string& body, const char* key, bool dflt) {
+    std::string needle = std::string("\"") + key + "\"";
+    size_t k = body.find(needle);
+    if (k == std::string::npos) return dflt;
+    size_t colon = body.find(':', k);
+    if (colon == std::string::npos) return dflt;
+    // Skip whitespace.
+    const char* p = body.c_str() + colon + 1;
+    while (*p == ' ' || *p == '\t') p++;
+    if (strncmp(p, "true", 4) == 0)  return true;
+    if (strncmp(p, "false", 5) == 0) return false;
+    return std::atoi(p) != 0;
+}
+
+static std::string handle_command(const std::string& line) {
+    auto cmd = get_str(line, "cmd");
+    if (cmd.empty()) {
+        // Bare command (no JSON) — match against the line trimmed.
+        std::string bare = line;
+        while (!bare.empty() && (bare.back() == '\n' || bare.back() == '\r' || bare.back() == ' ')) bare.pop_back();
+        cmd = bare;
+    }
+
+    if (cmd == "ping") {
+        return R"({"ok":true,"pong":true})";
+    }
+    if (cmd == "status") {
+        // The librecomp accessor for the external-message requeue
+        // counter — declared at file scope below for proper extern "C"
+        // linkage. A sustained nonzero value means some target
+        // OSMesgQueue's receiver is being starved relative to
+        // host-thread event posts.
+        char buf[1024];
+        std::snprintf(buf, sizeof(buf),
+            "{\"ok\":true,\"frame\":%llu,\"vi\":%llu,\"fast_forward\":%s,\"input_override\":%s,\"buttons\":%u,\"sx\":%d,\"sy\":%d,"
+            "\"send_dl\":%llu,\"send_dl_gfx\":%llu,\"send_dl_audio\":%llu,\"send_dl_other\":%llu,\"update_screen\":%llu,"
+            "\"external_requeues\":%llu}",
+            (unsigned long long)g_frame_count.load(),
+            (unsigned long long)g_vi_ticks.load(),
+            g_fast_forward.load() ? "true" : "false",
+            g_input_override_active.load() ? "true" : "false",
+            (unsigned)g_buttons_override.load(),
+            g_stick_x_override.load(),
+            g_stick_y_override.load(),
+            (unsigned long long)g_send_dl_count.load(),
+            (unsigned long long)g_send_dl_gfx_count.load(),
+            (unsigned long long)g_send_dl_audio_count.load(),
+            (unsigned long long)g_send_dl_other_count.load(),
+            (unsigned long long)g_update_screen_count.load(),
+            (unsigned long long)ultramodern_external_requeues()
+        );
+        return buf;
+    }
+    if (cmd == "set_button") {
+        auto name = get_str(line, "name");
+        bool down = get_bool(line, "down", true);
+        uint16_t bit = button_bit(name);
+        if (bit == 0) return R"({"ok":false,"error":"unknown button name"})";
+        g_input_override_active.store(true);
+        uint16_t cur = g_buttons_override.load();
+        if (down) cur |= bit; else cur &= ~bit;
+        g_buttons_override.store(cur);
+        return R"({"ok":true})";
+    }
+    if (cmd == "set_stick") {
+        g_input_override_active.store(true);
+        g_stick_x_override.store(get_int(line, "x", 0));
+        g_stick_y_override.store(get_int(line, "y", 0));
+        return R"({"ok":true})";
+    }
+    if (cmd == "clear_input") {
+        g_input_override_active.store(false);
+        g_buttons_override.store(0);
+        g_stick_x_override.store(0);
+        g_stick_y_override.store(0);
+        return R"({"ok":true})";
+    }
+    if (cmd == "fast_forward") {
+        g_fast_forward.store(get_bool(line, "on", true));
+        return R"({"ok":true})";
+    }
+    if (cmd == "enable_instant_present") {
+        g_enable_instant_present_request.store(true);
+        return R"({"ok":true})";
+    }
+    if (cmd == "trace_recent") {
+        // Returns the last N entries from the function-trace ring
+        // (TRACE_ENTRY / TRACE_RETURN hits). N defaults to 64; max 512.
+        // Used to diagnose "where is the game looping?" — read it
+        // periodically and the same names should keep cycling.
+        int n = get_int(line, "n", 64);
+        if (n < 1) n = 1;
+        if (n > 512) n = 512;
+        uint64_t widx = pkmnstadium_trace_write_idx();
+        uint32_t cap = pkmnstadium_trace_capacity();
+        if ((uint64_t)n > widx) n = (int)widx;
+        if ((uint32_t)n > cap) n = (int)cap;
+        std::string out = R"({"ok":true,"write_idx":)" + std::to_string(widx) + R"(,"entries":[)";
+        for (int i = 0; i < n; i++) {
+            uint64_t off = widx - n + i;
+            const char* name = pkmnstadium_trace_at(off);
+            if (i) out += ",";
+            out += "\"";
+            out += (name ? name : "?");
+            out += "\"";
+        }
+        out += "]}";
+        return out;
+    }
+    if (cmd == "libultra_recent") {
+        // Returns the last N libultra-call events from the ring in
+        // librecomp. Each event: function name, caller PC ($ra),
+        // a0..a3, ms-since-first-event, monotonic seq.
+        //
+        // Per the global "ring buffer" rule the ring is always-on
+        // (no arming). This command just queries backward over the
+        // window of interest. With cap=4096 and typical call rates
+        // this gives plenty of history relative to LLM tool latency.
+        int n = get_int(line, "n", 64);
+        if (n < 1) n = 1;
+        if (n > 1024) n = 1024;
+        uint64_t widx = recomp_ultra_trace_write_idx();
+        uint32_t cap  = recomp_ultra_trace_capacity();
+        if ((uint64_t)n > widx) n = (int)widx;
+        if ((uint32_t)n > cap)  n = (int)cap;
+
+        std::string out = R"({"ok":true,"write_idx":)" + std::to_string(widx)
+                        + R"(,"events":[)";
+        for (int i = 0; i < n; i++) {
+            uint64_t off = widx - n + i;
+            recomp_ultra_trace_event ev{};
+            int valid = recomp_ultra_trace_get(off, &ev);
+            char buf[320];
+            // Escape name minimally — known to be ASCII C symbols.
+            std::snprintf(buf, sizeof(buf),
+                "%s{\"i\":%llu,\"valid\":%s,\"name\":\"%s\","
+                "\"pc\":%u,\"a0\":%u,\"a1\":%u,\"a2\":%u,\"a3\":%u,"
+                "\"ms\":%llu}",
+                (i ? "," : ""),
+                (unsigned long long)off,
+                valid ? "true" : "false",
+                ev.name,
+                (unsigned)ev.pc,
+                (unsigned)ev.a0,
+                (unsigned)ev.a1,
+                (unsigned)ev.a2,
+                (unsigned)ev.a3,
+                (unsigned long long)ev.ms);
+            out += buf;
+        }
+        out += "]}";
+        return out;
+    }
+    if (cmd == "libultra_boot") {
+        // Returns a slice [start, start+n) from the non-evicting
+        // boot snapshot — the FIRST n events recorded since process
+        // start. Use this to answer "what did each thread do during
+        // boot?" no matter how long the game has been running.
+        //
+        // Args: {"start": <pos>, "n": <count>}
+        //   start: position into the boot buffer (default 0)
+        //   n:     max events to return (default 256, max 1024)
+        //
+        // The "name" field in each event reveals which thread
+        // (audio/scheduler/game) was active by which calls it
+        // makes; the "ms" field gives ordering relative to other
+        // threads.
+        int start = get_int(line, "start", 0);
+        int n     = get_int(line, "n", 256);
+        if (start < 0) start = 0;
+        if (n < 1) n = 1;
+        if (n > 1024) n = 1024;
+        uint32_t total = recomp_ultra_trace_boot_count();
+        uint32_t cap   = recomp_ultra_trace_boot_capacity();
+        std::string out =
+            R"({"ok":true,"count":)" + std::to_string(total) +
+            R"(,"capacity":)" + std::to_string(cap) +
+            R"(,"start":)" + std::to_string(start) +
+            R"(,"events":[)";
+        bool first = true;
+        for (int i = 0; i < n; i++) {
+            uint32_t pos = (uint32_t)start + (uint32_t)i;
+            if (pos >= total) break;
+            recomp_ultra_trace_event ev{};
+            int valid = recomp_ultra_trace_boot_get(pos, &ev);
+            char buf[320];
+            std::snprintf(buf, sizeof(buf),
+                "%s{\"i\":%u,\"valid\":%s,\"name\":\"%s\","
+                "\"pc\":%u,\"a0\":%u,\"a1\":%u,\"a2\":%u,\"a3\":%u,"
+                "\"ms\":%llu}",
+                (first ? "" : ","),
+                pos,
+                valid ? "true" : "false",
+                ev.name,
+                (unsigned)ev.pc,
+                (unsigned)ev.a0,
+                (unsigned)ev.a1,
+                (unsigned)ev.a2,
+                (unsigned)ev.a3,
+                (unsigned long long)ev.ms);
+            out += buf;
+            first = false;
+        }
+        out += "]}";
+        return out;
+    }
+    if (cmd == "rdram_peek") {
+        // Read N bytes from rdram at a virtual address. Generic
+        // diagnostic — useful for inspecting any global state in
+        // the recompiled game (struct fields, flags, queue
+        // counts, etc.) without needing to add a per-field TCP
+        // command for each.
+        //
+        // Args: {"addr": <vaddr>, "n": <count>}
+        //   addr: K0/K1 vaddr (0x80000000+ or 0xA0000000+)
+        //         physical addr also accepted (interpreted as KSEG0).
+        //   n:    bytes to read, 1..256.
+        //
+        // Returns hex string (big-endian byte order from N64's
+        // perspective — we XOR-3 the rdram index per the
+        // recompiler's swap convention).
+        uint32_t addr = get_uint(line, "addr", 0);
+        int n = get_int(line, "n", 4);
+        if (n < 1) n = 1;
+        if (n > 256) n = 256;
+
+        // Mask off K0/K1 segment bits, then bounds-check.
+        uint32_t paddr = addr & 0x1FFFFFFFu;
+        constexpr uint32_t kRdramSize = 8u * 1024u * 1024u;
+        if (paddr + (uint32_t)n > kRdramSize) {
+            return R"({"ok":false,"error":"oob"})";
+        }
+        // The recompiler uses XOR-3 byte addressing (big-endian
+        // word view of little-endian native rdram). Replicate
+        // that here to match what the game sees.
+        uint8_t* rdram = recomp_runtime_get_rdram();
+        if (rdram == nullptr) {
+            return R"({"ok":false,"error":"rdram not yet captured"})";
+        }
+        std::string hex;
+        hex.reserve((size_t)n * 2 + 4);
+        char tmp[4];
+        for (int i = 0; i < n; i++) {
+            uint8_t b = rdram[(paddr + (uint32_t)i) ^ 3];
+            std::snprintf(tmp, sizeof(tmp), "%02x", b);
+            hex += tmp;
+        }
+        return R"({"ok":true,"addr":)" + std::to_string(addr) +
+               R"(,"n":)" + std::to_string(n) +
+               R"(,"hex":")" + hex + R"("})";
+    }
+    // ---------------- Ares oracle bridge -----------------------------------
+    // The ares-bridge library is linked into the runner. These commands
+    // expose the oracle to external diff harnesses (tools/diff_aspmain.py).
+    // The bridge runs in this process; calls block the debug-server thread
+    // until the oracle returns. The runner's main thread is unaffected.
+    if (cmd == "ares_status") {
+        // Read every counter on the dedicated Ares thread so the trace
+        // ring's thread_local state is consistent with the writer.
+        return ares_worker::dispatch([]() -> std::string {
+            char buf[256];
+            std::snprintf(buf, sizeof(buf),
+                "{\"ok\":true,\"is_real\":%d,\"version\":\"%s\","
+                "\"trace_count\":%llu,\"trace_enabled\":%d,\"trace_boot_count\":%u}",
+                ares_bridge_is_real(),
+                ares_bridge_version() ? ares_bridge_version() : "?",
+                (unsigned long long)ares_rsp_trace_count(),
+                ares_rsp_trace_is_enabled(),
+                (unsigned)ares_rsp_trace_boot_count());
+            return std::string(buf);
+        });
+    }
+    if (cmd == "ares_init_oracle") {
+        // Args: {"rom_path": "..."}. ROM path is mandatory — caller picks
+        // the same baserom.z64 the runner is using.
+        std::string rom = get_str(line, "rom_path");
+        if (rom.empty()) return R"({"ok":false,"error":"missing rom_path"})";
+        return ares_worker::dispatch([&rom]() -> std::string {
+            ares_status_t s = ares_init(rom.c_str());
+            if (s != ARES_BRIDGE_OK && s != ARES_BRIDGE_ALREADY_INITIALIZED) {
+                char buf[160];
+                std::snprintf(buf, sizeof(buf),
+                    "{\"ok\":false,\"error\":\"ares_init failed\",\"status\":%d}", (int)s);
+                return std::string(buf);
+            }
+            ares_status_t r = ares_reset();
+            char buf[160];
+            std::snprintf(buf, sizeof(buf),
+                "{\"ok\":%s,\"init_status\":%d,\"reset_status\":%d}",
+                (r == ARES_BRIDGE_OK ? "true" : "false"), (int)s, (int)r);
+            return std::string(buf);
+        });
+    }
+    if (cmd == "ares_reset_oracle") {
+        return ares_worker::dispatch([]() -> std::string {
+            ares_status_t r = ares_reset();
+            char buf[96];
+            std::snprintf(buf, sizeof(buf),
+                "{\"ok\":%s,\"status\":%d}",
+                (r == ARES_BRIDGE_OK ? "true" : "false"), (int)r);
+            return std::string(buf);
+        });
+    }
+    if (cmd == "ares_step_frame") {
+        // Args: {"n": <count>}. Default 1, max 600 (~10s of emulated
+        // time at 60Hz — keeps the server thread responsive).
+        int n = get_int(line, "n", 1);
+        if (n < 1) n = 1;
+        if (n > 600) n = 600;
+        return ares_worker::dispatch([n]() -> std::string {
+            int done = 0;
+            ares_status_t last = ARES_BRIDGE_OK;
+            for (int i = 0; i < n; i++) {
+                last = ares_step_frame();
+                if (last != ARES_BRIDGE_OK) break;
+                done++;
+            }
+            char buf[160];
+            std::snprintf(buf, sizeof(buf),
+                "{\"ok\":%s,\"frames\":%d,\"status\":%d,\"trace_count\":%llu}",
+                (last == ARES_BRIDGE_OK ? "true" : "false"),
+                done, (int)last,
+                (unsigned long long)ares_rsp_trace_count());
+            return std::string(buf);
+        });
+    }
+    // CPU-side accessors (ares_read_pc, ares_read_cpu_register,
+    // ares_read_memory, ares_set_controller, ares_step_instruction) are
+    // intentionally NOT exposed yet — those bridge entry points are
+    // unimplemented in ares_core_glue.cpp (Phase 3+) and abort the
+    // process. The aspMain divergence diff is RSP-side, so the trace
+    // ring below has all the state we need; CPU accessors come online
+    // when Phase 3 lands.
+    if (cmd == "ares_rsp_trace_recent" || cmd == "ares_rsp_trace_boot" ||
+        cmd == "ares_rsp_trace_at_pc") {
+      return ares_worker::dispatch([&line, &cmd]() -> std::string {
+        // Three RSP trace queries share the same event-rendering tail.
+        //   ares_rsp_trace_recent {n}        → last n events from sliding ring
+        //   ares_rsp_trace_boot {start, n}   → slice [start, start+n) from boot snapshot
+        //   ares_rsp_trace_at_pc {pc, n}     → up to n most-recent events whose pc == arg
+        int n = get_int(line, "n", 32);
+        if (n < 1) n = 1;
+        if (n > 1024) n = 1024;
+        std::vector<ares_rsp_trace_event_t> events; events.reserve((size_t)n);
+
+        if (cmd == "ares_rsp_trace_recent") {
+            uint64_t total = ares_rsp_trace_count();
+            if ((uint64_t)n > total) n = (int)total;
+            for (int i = 0; i < n; i++) {
+                uint64_t idx = total - (uint64_t)n + (uint64_t)i;
+                ares_rsp_trace_event_t ev{};
+                if (ares_rsp_trace_get(idx, &ev)) events.push_back(ev);
+            }
+        } else if (cmd == "ares_rsp_trace_boot") {
+            int start = get_int(line, "start", 0);
+            if (start < 0) start = 0;
+            uint32_t total = ares_rsp_trace_boot_count();
+            for (int i = 0; i < n; i++) {
+                uint32_t pos = (uint32_t)start + (uint32_t)i;
+                if (pos >= total) break;
+                ares_rsp_trace_event_t ev{};
+                if (ares_rsp_trace_boot_get(pos, &ev)) events.push_back(ev);
+            }
+        } else { // ares_rsp_trace_at_pc
+            // Scan backward from the most recent event for up to "n"
+            // matches OR until 65536 events scanned (bound on cost).
+            uint32_t want_pc = get_uint(line, "pc", 0) & 0xFFFu;
+            uint64_t total = ares_rsp_trace_count();
+            int scanned = 0;
+            const int kScanCap = 65536;
+            for (uint64_t i = total; i-- > 0 && scanned < kScanCap && (int)events.size() < n; ) {
+                ares_rsp_trace_event_t ev{};
+                if (!ares_rsp_trace_get(i, &ev)) break; // ring rolled past
+                scanned++;
+                if ((ev.pc & 0xFFFu) == want_pc) events.push_back(ev);
+            }
+            // events accumulated newest-first; reverse to chronological.
+            std::reverse(events.begin(), events.end());
+        }
+
+        std::string out = std::string(R"({"ok":true,"trace_count":)") +
+                          std::to_string(ares_rsp_trace_count()) +
+                          R"(,"events":[)";
+        for (size_t i = 0; i < events.size(); i++) {
+            const auto& ev = events[i];
+            char buf[1024];
+            // Render gpr[] inline as a compact array. dma_* fields named
+            // to match the C struct so the harness can deserialize without
+            // a translation table.
+            int off = std::snprintf(buf, sizeof(buf),
+                "%s{\"seq\":%llu,\"pc\":%u,\"dma_mem_addr\":%u,"
+                "\"dma_dram_addr\":%u,\"dma_rd_len\":%u,\"dma_wr_len\":%u,"
+                "\"status\":%u,\"gpr\":[",
+                (i ? "," : ""),
+                (unsigned long long)ev.seq, (unsigned)ev.pc,
+                (unsigned)ev.dma_mem_addr, (unsigned)ev.dma_dram_addr,
+                (unsigned)ev.dma_rd_len, (unsigned)ev.dma_wr_len,
+                (unsigned)ev.status);
+            out.append(buf, (size_t)off);
+            for (int g = 0; g < 32; g++) {
+                char gbuf[16];
+                int goff = std::snprintf(gbuf, sizeof(gbuf), "%s%u",
+                    (g ? "," : ""), (unsigned)ev.gpr[g]);
+                out.append(gbuf, (size_t)goff);
+            }
+            out += "]}";
+        }
+        out += "]}";
+        return out;
+      });
+    }
+    if (cmd == "ares_rsp_trace_set_enabled") {
+        bool on = get_bool(line, "on", true);
+        return ares_worker::dispatch([on]() -> std::string {
+            ares_rsp_trace_set_enabled(on ? 1 : 0);
+            return std::string(R"({"ok":true,"enabled":)") +
+                   std::to_string(ares_rsp_trace_is_enabled()) + "}";
+        });
+    }
+
+    if (cmd == "get_last_pc_trail") {
+        // Returns the live pc_trail of the most-recently-launched RSP
+        // ucode (typically aspMain on Stadium). Use this to monitor
+        // a hang in real-time without waiting for the watchdog to trip.
+        // Returns 32 PCs in chronological order (oldest first), the
+        // current ring index, and the watchdog counter.
+        recomp::rsp::PcTrailSnapshot snap{};
+        bool ok = recomp::rsp::get_last_pc_trail(&snap);
+        if (!ok || !snap.valid) {
+            return R"({"ok":true,"valid":false})";
+        }
+        // Render entries in chronological order: ring start = (idx & 31),
+        // wrapping forward 32 times reaches the newest entry just
+        // before idx.
+        std::string out = R"({"ok":true,"valid":true,"idx":)" +
+                          std::to_string(snap.idx) +
+                          R"(,"watchdog_count":)" +
+                          std::to_string(snap.watchdog_count) +
+                          R"(,"pc_trail":[)";
+        for (int i = 0; i < 32; i++) {
+            uint32_t pos = (snap.idx + (uint32_t)i) & 31u;
+            char tmp[16];
+            std::snprintf(tmp, sizeof(tmp), "%s%u",
+                (i ? "," : ""), (unsigned)snap.entries[pos]);
+            out += tmp;
+        }
+        out += "]}";
+        return out;
+    }
+    if (cmd == "tail_errlog") {
+        FILE* f = fopen("F:/Projects/PokemonStadiumRecomp/build/last_error.log", "rb");
+        if (!f) return R"({"ok":true,"errlog":""})";
+        char chunk[4096]{};
+        size_t n = fread(chunk, 1, sizeof(chunk) - 1, f);
+        chunk[n] = 0;
+        fclose(f);
+        // Naive escape — replace " and \ with safe substitutes.
+        std::string out = R"({"ok":true,"errlog":")";
+        for (size_t i = 0; i < n; i++) {
+            char c = chunk[i];
+            if (c == '"' || c == '\\') { out += '\\'; out += c; }
+            else if (c == '\n') out += "\\n";
+            else if (c == '\r') out += "\\r";
+            else if ((unsigned char)c < 0x20) ; // skip
+            else out += c;
+        }
+        out += R"("})";
+        return out;
+    }
+    if (cmd == "quit") {
+        ExitProcess(0);  // hard exit — debug-driven shutdown
+        return R"({"ok":true})";
+    }
+    return R"({"ok":false,"error":"unknown command"})";
+}
+
+static void server_loop(int port) {
+    WSADATA wsa;
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+        fprintf(stderr, "[dbg] WSAStartup failed\n");
+        return;
+    }
+    s_listen_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (s_listen_sock == INVALID_SOCKET) {
+        fprintf(stderr, "[dbg] socket() failed\n");
+        return;
+    }
+
+    BOOL reuse = TRUE;
+    setsockopt(s_listen_sock, SOL_SOCKET, SO_REUSEADDR, (char*)&reuse, sizeof(reuse));
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr.S_un.S_addr = htonl(INADDR_LOOPBACK);
+    if (bind(s_listen_sock, (sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR) {
+        fprintf(stderr, "[dbg] bind() failed err=%d\n", WSAGetLastError());
+        return;
+    }
+    if (listen(s_listen_sock, 1) == SOCKET_ERROR) {
+        fprintf(stderr, "[dbg] listen() failed\n");
+        return;
+    }
+    fprintf(stderr, "[dbg] listening on 127.0.0.1:%d\n", port);
+    fflush(stderr);
+
+    while (s_running.load()) {
+        sockaddr_in caddr{};
+        int caddr_len = sizeof(caddr);
+        SOCKET client = accept(s_listen_sock, (sockaddr*)&caddr, &caddr_len);
+        if (client == INVALID_SOCKET) {
+            if (!s_running.load()) break;
+            continue;
+        }
+        // Read line-by-line until disconnect.
+        std::string buf;
+        buf.reserve(1024);
+        char chunk[1024];
+        while (s_running.load()) {
+            int n = recv(client, chunk, sizeof(chunk), 0);
+            if (n <= 0) break;
+            buf.append(chunk, chunk + n);
+            // Process complete lines.
+            size_t nl;
+            while ((nl = buf.find('\n')) != std::string::npos) {
+                std::string line = buf.substr(0, nl);
+                buf.erase(0, nl + 1);
+                std::string resp = handle_command(line);
+                resp += "\n";
+                send(client, resp.c_str(), (int)resp.size(), 0);
+            }
+        }
+        closesocket(client);
+    }
+
+    closesocket(s_listen_sock);
+    WSACleanup();
+}
+
+void start(int port) {
+    if (s_running.load()) return;
+    s_running.store(true);
+    s_thread = std::thread(server_loop, port);
+    s_thread.detach();
+}
+
+void shutdown() {
+    s_running.store(false);
+    if (s_listen_sock != INVALID_SOCKET) {
+        closesocket(s_listen_sock);
+    }
+}
+
+} // namespace dbg
+} // namespace pkmnstadium

@@ -1,0 +1,66 @@
+diff --git a/linker_scripts/us/undefined_syms.ld b/linker_scripts/us/undefined_syms.ld
+index 53b1fa4..547f523 100644
+--- a/linker_scripts/us/undefined_syms.ld
++++ b/linker_scripts/us/undefined_syms.ld
+@@ -590,3 +590,9 @@ D_3007910 = 0x3007910;
+ D_3008018 = 0x3008018;
+ D_3007BE0 = 0x3007BE0;
+ D_3007D48 = 0x3007D48;
++/* fragment78 false-positive symbol references — splat picked them up
++   from raw texture/displaylist data words like 0x80080080 that happen to
++   land near these vrams. The bytes are identical either way; declaring
++   them keeps the linker happy. */
++D_8007F730 = 0x8007F730;
++D_80081900 = 0x80081900;
+diff --git a/yamls/us/rom.yaml b/yamls/us/rom.yaml
+index fbf0b71..b816c82 100644
+--- a/yamls/us/rom.yaml
++++ b/yamls/us/rom.yaml
+@@ -2755,7 +2755,7 @@
+     type: code
+     bss_size: 0x0
+     start: 0x8CC000
+-    vram: 0x8FF00000
++    vram: 0x8FE80000 # was 0x8FF00000; collided with fragment78 below.
+     ld_align_segment_start: 0x8CC000
+     subsegments:
+     - [0x8CC000, bin]
+@@ -2768,7 +2768,37 @@
+     ld_align_segment_start: 0x920000
+     subsegments:
+     - [0x920000, bin, pokemon_models]
+-    
++
++  # 78th FRAGMENT in the ROM. pret's split bundled this region under
++  # pokemon_models bin; the fragment magic at this ROM offset shows it's
++  # actually a relocatable code fragment with id 0xEF (link-vram 0x8FF00000).
++  - name: fragment78
++    type: code
++    bss_size: 0x0
++    start: 0x1206400
++    vram: 0x8FF00000
++    subsegments:
++    - [0x1206400, textbin, fragments/78/fragment78_header]
++    - [0x1206420, asm,     fragments/78/fragment78]
++
++  - name: fragment78_relocs
++    type: code
++    bss_size: 0x0
++    start: 0x1219AF0
++    vram: 0x00000000
++    subsegments:
++    - [0x1219AF0, rodatabin, fragments/78/fragment78_reloc]
++
++  # Continuation of pokemon_models bin after the carved-out fragment78.
++  - name: pokemon_models_post
++    type: code
++    bss_size: 0x0
++    start: 0x1219E30
++    vram: 0x90F00000
++    ld_align_segment_start: 0x1219E30
++    subsegments:
++    - [0x1219E30, bin, pokemon_models_post]
++
+   # sound data?
+   - name: late_assets_6
+     type: code

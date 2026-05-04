@@ -1,0 +1,3 @@
+[submodule "disasm"]
+	path = disasm
+	url = https://github.com/pret/pokestadium

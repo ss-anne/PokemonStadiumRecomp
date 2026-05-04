@@ -1,0 +1,16 @@
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary
+*.z64 binary
+*.n64 binary
+*.v64 binary
+*.bin binary
+*.png binary
+*.jpg binary
+*.gif binary
+*.zip binary
+*.gpr binary
+*.gar binary
