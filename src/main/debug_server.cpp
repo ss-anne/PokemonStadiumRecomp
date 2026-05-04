@@ -85,6 +85,76 @@ std::atomic<uint64_t> g_send_dl_audio_count{0};
 std::atomic<uint64_t> g_send_dl_gfx_count{0};
 std::atomic<uint64_t> g_send_dl_other_count{0};
 
+// ---- Input history ring (for crash repro replay) --------------------------
+// Records every input-altering TCP command (claim/clear, set_button,
+// set_stick) with the frame counter at command time. Dumped to
+// build/last_run_input_history.json on post-mortem so we can re-drive
+// the same sequence without a human in the loop.
+struct InputEvent {
+    uint64_t frame;     // ultramodern frame counter at event time
+    uint64_t timestamp_ms; // wall clock ms since session start
+    char     kind[16];  // "claim", "clear", "button", "stick"
+    char     name[16];  // button name (for "button")
+    int      down;      // 0/1 (for "button")
+    int      x, y;      // (for "stick")
+};
+static constexpr size_t INPUT_HISTORY_CAP = 4096;
+static InputEvent        s_input_history[INPUT_HISTORY_CAP];
+static std::atomic<uint64_t> s_input_history_seq{0};
+static std::mutex        s_input_history_mu;
+static std::atomic<uint64_t> s_session_start_ms{0};
+
+static uint64_t now_ms() {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(
+        steady_clock::now().time_since_epoch()).count();
+}
+
+static void record_input_event(const char* kind,
+                               const char* name = "",
+                               int down = 0, int x = 0, int y = 0)
+{
+    std::lock_guard<std::mutex> lock(s_input_history_mu);
+    uint64_t s0 = s_session_start_ms.load();
+    if (s0 == 0) {
+        s_session_start_ms.store(now_ms());
+        s0 = s_session_start_ms.load();
+    }
+    uint64_t seq = s_input_history_seq.fetch_add(1);
+    InputEvent& ev = s_input_history[seq % INPUT_HISTORY_CAP];
+    ev.frame = g_frame_count.load();
+    ev.timestamp_ms = now_ms() - s0;
+    std::snprintf(ev.kind, sizeof(ev.kind), "%s", kind);
+    std::snprintf(ev.name, sizeof(ev.name), "%s", name ? name : "");
+    ev.down = down;
+    ev.x = x;
+    ev.y = y;
+}
+
+// Public — called by post_mortem.cpp to dump history to JSON file.
+extern "C" void psr_dump_input_history_json(const char* path) {
+    FILE* f = std::fopen(path, "w");
+    if (!f) return;
+    std::lock_guard<std::mutex> lock(s_input_history_mu);
+    uint64_t total = s_input_history_seq.load();
+    uint64_t count = std::min(total, (uint64_t)INPUT_HISTORY_CAP);
+    uint64_t start = (total > INPUT_HISTORY_CAP) ? (total - INPUT_HISTORY_CAP) : 0;
+    std::fprintf(f, "{\n  \"total_events\": %llu,\n  \"capacity\": %zu,\n  \"events\": [\n",
+                 (unsigned long long)total, INPUT_HISTORY_CAP);
+    for (uint64_t i = 0; i < count; i++) {
+        const InputEvent& ev = s_input_history[(start + i) % INPUT_HISTORY_CAP];
+        std::fprintf(f,
+            "    {\"frame\":%llu,\"t_ms\":%llu,\"kind\":\"%s\",\"name\":\"%s\","
+            "\"down\":%d,\"x\":%d,\"y\":%d}%s\n",
+            (unsigned long long)ev.frame,
+            (unsigned long long)ev.timestamp_ms,
+            ev.kind, ev.name, ev.down, ev.x, ev.y,
+            (i + 1 < count) ? "," : "");
+    }
+    std::fprintf(f, "  ]\n}\n");
+    std::fclose(f);
+}
+
 // ---- Internals -------------------------------------------------------------
 static std::thread        s_thread;
 static std::atomic<bool>  s_running{false};
@@ -233,12 +303,16 @@ static std::string handle_command(const std::string& line) {
         uint16_t cur = g_buttons_override.load();
         if (down) cur |= bit; else cur &= ~bit;
         g_buttons_override.store(cur);
+        record_input_event("button", name.c_str(), down ? 1 : 0);
         return R"({"ok":true})";
     }
     if (cmd == "set_stick") {
         g_input_override_active.store(true);
-        g_stick_x_override.store(get_int(line, "x", 0));
-        g_stick_y_override.store(get_int(line, "y", 0));
+        int x = get_int(line, "x", 0);
+        int y = get_int(line, "y", 0);
+        g_stick_x_override.store(x);
+        g_stick_y_override.store(y);
+        record_input_event("stick", "", 0, x, y);
         return R"({"ok":true})";
     }
     if (cmd == "clear_input") {
@@ -246,7 +320,32 @@ static std::string handle_command(const std::string& line) {
         g_buttons_override.store(0);
         g_stick_x_override.store(0);
         g_stick_y_override.store(0);
+        record_input_event("clear");
         return R"({"ok":true})";
+    }
+    if (cmd == "input_history") {
+        // Returns full input history ring as JSON (for live inspection;
+        // post-mortem also dumps this to build/last_run_input_history.json).
+        std::lock_guard<std::mutex> lock(s_input_history_mu);
+        uint64_t total = s_input_history_seq.load();
+        uint64_t count = std::min(total, (uint64_t)INPUT_HISTORY_CAP);
+        uint64_t start = (total > INPUT_HISTORY_CAP) ? (total - INPUT_HISTORY_CAP) : 0;
+        std::string out = R"({"ok":true,"total":)" + std::to_string(total) +
+                          R"(,"events":[)";
+        for (uint64_t i = 0; i < count; i++) {
+            const InputEvent& ev = s_input_history[(start + i) % INPUT_HISTORY_CAP];
+            char buf[256];
+            std::snprintf(buf, sizeof(buf),
+                "%s{\"frame\":%llu,\"t_ms\":%llu,\"kind\":\"%s\","
+                "\"name\":\"%s\",\"down\":%d,\"x\":%d,\"y\":%d}",
+                (i ? "," : ""),
+                (unsigned long long)ev.frame,
+                (unsigned long long)ev.timestamp_ms,
+                ev.kind, ev.name, ev.down, ev.x, ev.y);
+            out += buf;
+        }
+        out += "]}";
+        return out;
     }
     if (cmd == "interesting_fns") {
         // Returns the non-evicting interesting-function counters from
@@ -315,6 +414,7 @@ static std::string handle_command(const std::string& line) {
         // controller present in port 1. Must be sent BEFORE osContInit
         // — i.e. immediately after the TCP server accepts.
         g_input_override_active.store(true);
+        record_input_event("claim");
         return R"({"ok":true})";
     }
     if (cmd == "fast_forward") {

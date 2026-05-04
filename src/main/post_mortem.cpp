@@ -80,6 +80,18 @@ extern "C" void     recomp_sp_task_recent_copy(
     void* out_void, size_t cap, size_t* n_written, uint64_t* next_seq_out);
 extern "C" size_t   recomp_sp_task_event_size(void);
 
+// Audio-bus dispatch rings (extras.c). Used to triangulate the
+// quick-battle n_alMainBusPull NULL+0xBC crash 2026-05-03.
+extern "C" uint64_t pkmnstadium_afx_in_seq(void);
+extern "C" uint64_t pkmnstadium_afx_out_seq(void);
+extern "C" uint64_t pkmnstadium_mbp_pre_seq(void);
+extern "C" uint64_t pkmnstadium_mbp_disp_seq(void);
+extern "C" uint32_t pkmnstadium_afx_ring_cap(void);
+extern "C" void pkmnstadium_afx_in_get  (uint32_t i, uint32_t* a, uint32_t* b, uint32_t* c);
+extern "C" void pkmnstadium_afx_out_get (uint32_t i, uint32_t* a, uint32_t* b, uint32_t* c);
+extern "C" void pkmnstadium_mbp_pre_get (uint32_t i, uint32_t* a, uint32_t* b, uint32_t* c);
+extern "C" void pkmnstadium_mbp_disp_get(uint32_t i, uint32_t* a, uint32_t* b, uint32_t* c);
+
 // recomp runtime — provides RDRAM base for safe reads
 extern "C" uint8_t* recomp_runtime_get_rdram(void);
 
@@ -624,6 +636,45 @@ void dump_hardware_state_json(FILE* f) {
     std::fprintf(f, "    \"_end\": true\n  },\n");
 }
 
+// Audio bus rings (extras.c). Each is 32 entries: (a, b, c) tuple.
+// _in:   (a0=sampleOffset, a1=acmd_ptr, seq) — n_alFxPull entry
+// _out:  (v0=ret, s0=internal, seq)          — n_alFxPull exit
+// _pre:  (v0, s7, a1)                         — n_alMainBusPull crash-site
+// _disp: (t8=n_syn, t9=handler, v0=ret)       — bus dispatch (jalr $t9)
+void dump_audio_rings_json(FILE* f) {
+    const uint32_t cap = pkmnstadium_afx_ring_cap();
+    auto dump_one = [&](const char* key, uint64_t seq,
+                        void(*get)(uint32_t,uint32_t*,uint32_t*,uint32_t*),
+                        const char* ka, const char* kb, const char* kc)
+    {
+        std::fprintf(f, "  \"%s\": {\"seq\":%llu,\"cap\":%u,\"events\":[",
+                     key, (unsigned long long)seq, cap);
+        // Walk in chronological order: oldest first.
+        const uint64_t n = (seq < cap) ? seq : cap;
+        const uint64_t start = (seq < cap) ? 0 : (seq - cap);
+        for (uint64_t i = 0; i < n; i++) {
+            uint64_t idx = (start + i) % cap;
+            uint32_t a, b, c;
+            get((uint32_t)idx, &a, &b, &c);
+            std::fprintf(f,
+                "%s{\"i\":%llu,\"%s\":%u,\"%s\":%u,\"%s\":%u}",
+                (i ? "," : ""),
+                (unsigned long long)(start + i),
+                ka, a, kb, b, kc, c);
+        }
+        std::fprintf(f, "]},\n");
+    };
+
+    dump_one("audio_afx_in",   pkmnstadium_afx_in_seq(),
+             pkmnstadium_afx_in_get,   "a0", "a1", "seq");
+    dump_one("audio_afx_out",  pkmnstadium_afx_out_seq(),
+             pkmnstadium_afx_out_get,  "v0", "s0", "seq");
+    dump_one("audio_mbp_pre",  pkmnstadium_mbp_pre_seq(),
+             pkmnstadium_mbp_pre_get,  "v0", "s7", "a1");
+    dump_one("audio_mbp_disp", pkmnstadium_mbp_disp_seq(),
+             pkmnstadium_mbp_disp_get, "t8", "t9", "v0");
+}
+
 void dump_seh_json(FILE* f, EXCEPTION_POINTERS* info) {
     if (info == nullptr) {
         std::fprintf(f, "  \"seh\": null,\n");
@@ -691,8 +742,15 @@ extern "C" void psr_post_mortem_dump(const char* reason,
     dump_full_rdram_to_file();
     dump_interp_probe_json(f);
     dump_interp_cf_json(f);
+    dump_audio_rings_json(f);
     dump_all_threads_json(f, fault_info);
 
     std::fprintf(f, "  \"_end\": true\n}\n");
     std::fclose(f);
+
+    // Separate file: input history (so the replay tool doesn't need
+    // to parse the multi-MB main report). Empty if no input was driven.
+    extern void psr_dump_input_history_json(const char* path);
+    psr_dump_input_history_json(
+        "F:/Projects/PokemonStadiumRecomp/build/last_run_input_history.json");
 }

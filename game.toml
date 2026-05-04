@@ -2904,6 +2904,43 @@ func = "n_alLoadParam"
 before_vram = 0x8004FAE4
 text = "pkmnstadium_audio_voice_check(ctx->r7, ctx->r2, ctx->r3);"
 
+# n_alFxPull / n_alMainBusPull triangulation for the quick-battle
+# audio cmd-buffer NULL+0xBC crash 2026-05-03. The crash is in
+# n_alMainBusPull (funcs_19.c:4796) at `sw $s7, 0x4($v0)` where
+# $v0=0xB8. $v0 is the return from the bus filter handler call,
+# which RDRAM dump confirms = 0x800500C0 = n_alFxPull. Hooks below
+# tell us exactly what n_alFxPull saw on entry, returned on exit,
+# and what state n_alMainBusPull was in just before the SEH.
+[[patches.hook]]
+func = "n_alFxPull"
+before_vram = 0x800500C0   # entry instr (addiu $sp,$sp,-0x70)
+text = "pkmnstadium_afxpull_enter(ctx->r4, ctx->r5);"
+
+[[patches.hook]]
+func = "n_alFxPull"
+before_vram = 0x80050398   # `jr $ra` — $v0 = $s0+8 already set at 0x80050370
+text = "pkmnstadium_afxpull_exit(ctx->r2, ctx->r16);"
+
+[[patches.hook]]
+func = "n_alMainBusPull"
+before_vram = 0x80050D14   # the exact `sw $s7, 0x4($v0)` that SEH'd
+text = "pkmnstadium_mbp_precrash(ctx->r2, ctx->r23, ctx->r5);"
+
+# Dispatch-time probes: who actually gets called by `jalr $t9` at
+# 0x80050CF4? Repro 2 (2026-05-03) showed mbp_precrash BAD without
+# afxpull_exit BAD, so either n_alFxPull was never entered (the
+# dispatch picked up a different handler) OR a different call path
+# bypassed the exit hook. These two probes settle it.
+[[patches.hook]]
+func = "n_alMainBusPull"
+before_vram = 0x80050CF4   # the `jalr $t9` itself ($t8=n_syn, $t9=handler)
+text = "pkmnstadium_mbp_dispatch(ctx->r24, ctx->r25);"
+
+[[patches.hook]]
+func = "n_alMainBusPull"
+before_vram = 0x80050CFC   # right at after_0: label, $v0=handler return
+text = "pkmnstadium_mbp_dispatch_ret(ctx->r2);"
+
 # func_80019D18 lookup diagnostic — capture (input_idx, return_v0)
 # pairs to identify which idx Stadium asks for that misses. The
 # menu-load crash at func_86B0027C deref's a NULL returned by this

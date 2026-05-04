@@ -312,6 +312,136 @@ void pkmnstadium_audio_voice_check(uint32_t a3, uint32_t v0, uint32_t v1) {
     }
 }
 
+/* n_alFxPull / n_alMainBusPull diagnostic ring for the quick-battle
+ * NULL+0xBC crash 2026-05-03. The crash is a write through $v0=0xB8
+ * inside n_alMainBusPull right after `jalr $t9` to the bus filter
+ * handler (resolved via RDRAM dump to be n_alFxPull at 0x800500C0).
+ *
+ * Hooks:
+ *   - n_alFxPull entry (0x800500C0): record (a0=sampleOffset, a1=ptr)
+ *   - n_alFxPull exit  (0x80050398, the `jr $ra`): record (v0=ret)
+ *     and stderr-shout if v0 < 0x80000000 (caught the bad-return)
+ *   - n_alMainBusPull pre-crash (0x80050D14, the `sw $s7, 0x4($v0)`):
+ *     record (v0, s7, a1) and stderr-shout if v0 < 0x80000000
+ *
+ * Each ring keeps the last 32 events so a post-mortem after a crash
+ * shows the recent context (good calls preceding the bad one). */
+#define AFX_RING_CAP 32
+struct afx_ev { uint32_t a, b, c; };
+static volatile struct afx_ev s_afx_in_ring[AFX_RING_CAP];
+static volatile struct afx_ev s_afx_out_ring[AFX_RING_CAP];
+static volatile struct afx_ev s_mbp_pre_ring[AFX_RING_CAP];
+static volatile uint64_t s_afx_in_seq = 0, s_afx_out_seq = 0, s_mbp_pre_seq = 0;
+static __thread int s_afx_logged_bad = 0;
+static __thread int s_mbp_logged_bad = 0;
+
+void pkmnstadium_afxpull_enter(uint32_t a0, uint32_t a1) {
+    uint64_t s = s_afx_in_seq++;
+    s_afx_in_ring[s % AFX_RING_CAP].a = a0;
+    s_afx_in_ring[s % AFX_RING_CAP].b = a1;
+    s_afx_in_ring[s % AFX_RING_CAP].c = (uint32_t)(s & 0xFFFFFFFF);
+}
+
+void pkmnstadium_afxpull_exit(uint32_t v0, uint32_t s0) {
+    uint64_t s = s_afx_out_seq++;
+    s_afx_out_ring[s % AFX_RING_CAP].a = v0;
+    s_afx_out_ring[s % AFX_RING_CAP].b = s0;
+    s_afx_out_ring[s % AFX_RING_CAP].c = (uint32_t)(s & 0xFFFFFFFF);
+    if ((v0 < 0x80000000u || v0 >= 0x80800000u) && !s_afx_logged_bad) {
+        s_afx_logged_bad = 1;
+        fprintf(stderr,
+            "[afxpull_exit] BAD v0=0x%08X  s0=0x%08X  seq=%llu  "
+            "(expected Acmd* in [0x80000000, 0x80800000))\n",
+            v0, s0, (unsigned long long)s);
+        fflush(stderr);
+    }
+}
+
+void pkmnstadium_mbp_precrash(uint32_t v0, uint32_t s7, uint32_t a1) {
+    uint64_t s = s_mbp_pre_seq++;
+    s_mbp_pre_ring[s % AFX_RING_CAP].a = v0;
+    s_mbp_pre_ring[s % AFX_RING_CAP].b = s7;
+    s_mbp_pre_ring[s % AFX_RING_CAP].c = a1;
+    if ((v0 < 0x80000000u || v0 >= 0x80800000u) && !s_mbp_logged_bad) {
+        s_mbp_logged_bad = 1;
+        fprintf(stderr,
+            "[mbp_precrash] BAD v0=0x%08X  s7=0x%08X  a1=0x%08X  seq=%llu  "
+            "(about to sw $s7,0x4($v0) and SEH)\n",
+            v0, s7, a1, (unsigned long long)s);
+        fflush(stderr);
+    }
+}
+
+/* Bus dispatch in n_alMainBusPull: who actually gets called?
+ * 0x80050CF4: jalr $t9 → handler(rdram, ctx); after, $v0 has return.
+ * mbp_dispatch fires BEFORE the call: $t8 = n_syn ptr, $t9 = handler.
+ * mbp_dispatch_ret fires AFTER the call: $v0 = handler's return.
+ * Both conditional-shout if the handler ptr or return is implausible. */
+struct dispatch_ev { uint32_t t8, t9, v0; };
+static volatile struct dispatch_ev s_mbp_disp_ring[AFX_RING_CAP];
+static volatile uint64_t s_mbp_disp_seq = 0;
+static __thread int s_mbp_disp_logged_bad = 0;
+
+void pkmnstadium_mbp_dispatch(uint32_t t8, uint32_t t9) {
+    uint64_t s = s_mbp_disp_seq++;
+    uint32_t idx = s % AFX_RING_CAP;
+    s_mbp_disp_ring[idx].t8 = t8;
+    s_mbp_disp_ring[idx].t9 = t9;
+    s_mbp_disp_ring[idx].v0 = 0xDEADBEEFu;  /* will be overwritten by _ret */
+    if ((t9 < 0x80000000u || t9 >= 0x80800000u) && !s_mbp_disp_logged_bad) {
+        s_mbp_disp_logged_bad = 1;
+        fprintf(stderr,
+            "[mbp_dispatch] BAD handler t9=0x%08X  n_syn=0x%08X  seq=%llu  "
+            "(about to jalr to garbage)\n",
+            t9, t8, (unsigned long long)s);
+        fflush(stderr);
+    }
+}
+
+void pkmnstadium_mbp_dispatch_ret(uint32_t v0) {
+    /* Most recent dispatch entry is at (s_mbp_disp_seq - 1) % CAP. */
+    uint64_t s = s_mbp_disp_seq;
+    if (s == 0) return;
+    uint32_t idx = (s - 1) % AFX_RING_CAP;
+    s_mbp_disp_ring[idx].v0 = v0;
+    if ((v0 < 0x80000000u || v0 >= 0x80800000u) && !s_mbp_disp_logged_bad) {
+        s_mbp_disp_logged_bad = 1;
+        fprintf(stderr,
+            "[mbp_dispatch_ret] BAD v0=0x%08X  handler t9=0x%08X  seq=%llu  "
+            "(handler returned non-RDRAM ptr)\n",
+            v0, s_mbp_disp_ring[idx].t9, (unsigned long long)(s - 1));
+        fflush(stderr);
+    }
+}
+
+/* Public getters so post_mortem can serialize the rings as JSON. */
+uint64_t pkmnstadium_afx_in_seq(void)   { return s_afx_in_seq; }
+uint64_t pkmnstadium_afx_out_seq(void)  { return s_afx_out_seq; }
+uint64_t pkmnstadium_mbp_pre_seq(void)  { return s_mbp_pre_seq; }
+uint64_t pkmnstadium_mbp_disp_seq(void) { return s_mbp_disp_seq; }
+uint32_t pkmnstadium_afx_ring_cap(void) { return AFX_RING_CAP; }
+
+void pkmnstadium_afx_in_get(uint32_t i, uint32_t* a, uint32_t* b, uint32_t* c) {
+    *a = s_afx_in_ring[i % AFX_RING_CAP].a;
+    *b = s_afx_in_ring[i % AFX_RING_CAP].b;
+    *c = s_afx_in_ring[i % AFX_RING_CAP].c;
+}
+void pkmnstadium_afx_out_get(uint32_t i, uint32_t* a, uint32_t* b, uint32_t* c) {
+    *a = s_afx_out_ring[i % AFX_RING_CAP].a;
+    *b = s_afx_out_ring[i % AFX_RING_CAP].b;
+    *c = s_afx_out_ring[i % AFX_RING_CAP].c;
+}
+void pkmnstadium_mbp_pre_get(uint32_t i, uint32_t* a, uint32_t* b, uint32_t* c) {
+    *a = s_mbp_pre_ring[i % AFX_RING_CAP].a;
+    *b = s_mbp_pre_ring[i % AFX_RING_CAP].b;
+    *c = s_mbp_pre_ring[i % AFX_RING_CAP].c;
+}
+void pkmnstadium_mbp_disp_get(uint32_t i, uint32_t* t8, uint32_t* t9, uint32_t* v0) {
+    *t8 = s_mbp_disp_ring[i % AFX_RING_CAP].t8;
+    *t9 = s_mbp_disp_ring[i % AFX_RING_CAP].t9;
+    *v0 = s_mbp_disp_ring[i % AFX_RING_CAP].v0;
+}
+
 /* func_80003DC4(rom_start, rom_end, 0, 0) — the PERS-SZP wrapper
  * loader. Logs every call's args + first 8 bytes of the destination
  * (the wrapper magic) so we can correlate which entries actually
