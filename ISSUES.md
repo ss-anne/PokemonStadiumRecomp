@@ -91,3 +91,54 @@ playable.
       stubbing, oracle architecture.
 - [ ] Per-overlay README skeletons under `overlays/<name>/` once
       extraction tool runs.
+
+## Audio
+
+- [ ] **Music-rate periodic tick.** After the post-title audio UAF
+      fix landed (2026-05-06), a subtle periodic tick remains during
+      music playback. User reports it tracks the music tempo (not
+      sound effects, not announcer/dialog), suggesting either a
+      sequence-tick-rate or chunk-DMA-boundary artifact. Diagnostic
+      rings are quiet (no `[adpcm-overflow]`, no `[dispatch-corrupt]`,
+      no `[aspMain]` unknown-dispatch) — this is a sub-catastrophic
+      DSP-level fidelity issue, not the same UAF family.
+
+      Hypotheses, in priority order:
+      1. **aspMain chunk-N DMA boundary.** The pre-task hook now
+         correctly handles chunk 0; chunk-N transitions (each subsequent
+         0x140-byte fill from DRAM into DMEM[0x2B0]) have not been
+         instrumented. An off-by-one at a chunk boundary would
+         manifest as a click roughly every (chunk_count × frame_rate),
+         which fits "music-rate" if the audio task processes
+         multiple chunks per frame.
+      2. **Voice re-allocation glitch.** When Stadium starts a new
+         voice in a new scene, there may be a brief moment where
+         `dc_table` is set but `dc_state` (per-voice ADPCM
+         decompressor state) hasn't been initialized. The first
+         ADPCM block plays from uninitialized state and clicks
+         before settling.
+
+      Next steps: instrument chunk-N DMA boundaries (extend the
+      `[aspmain_chunk0]` ring to cover later chunks), correlate
+      tick frequency with `n_alAudioFrame` cmd buffer size +
+      chunk count.
+
+- [ ] **Pre-decompressed ROM build step.** Backlog architectural
+      cleanup: replace runtime `[[input.decompressed_section]]`
+      engine extension with a build-time tool that produces a fully
+      decompressed Stadium ROM, then recompiles against that. Wins:
+      simpler engine, recompiler can see post-decompression bytes
+      directly, mods target known offsets. Cost: bigger ROM (32 MiB
+      → ~80–100 MiB), pre-decompression tool needs to handle Yay0
+      and PERS-SZP fragments. Existing infrastructure to build on:
+      `tools/_decompress_fragment78.py`. Defer until the audio
+      family is fully closed.
+
+- [ ] **kseg1 ROM-read patching.** Backlog architectural cleanup:
+      replace runtime `mirror_rom_to_kseg1` (currently populates
+      `rdram[0x30000000..]` with ROM bytes for direct cart-vaddr
+      reads) with per-site `game.toml` patches at each known
+      kseg1-ROM-access site. Known site: `Game_DoCopyProtection`
+      reading `*(u32*)0xB0000E38`. Wins: keeps the rdram region
+      free for mod use, follows the established N64Recomp project
+      pattern. Defer until the audio family is fully closed.
