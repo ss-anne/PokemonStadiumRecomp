@@ -562,6 +562,55 @@ static void pkmnstadium_wt_dump_for_filter(uint32_t filter_vaddr) {
     }
 }
 
+/* main_pool_pop_state caller probe.
+ *
+ * The post-title audio UAF (2026-05-06) traced to a 1 MiB pool alloc
+ * landing at 0x8018A1B0 — overlapping wavetable structs that voices
+ * still pointed at. For the bump-allocator to land there again, a
+ * main_pool_pop_state must have run between the original
+ * SET_WAVETABLE and the load2 alloc. This probe logs every pop's
+ * caller PC + gCurrentGameState + pool-top before/after so the
+ * post-mortem shows which Stadium function freed the bank-resident
+ * memory without first stopping the voices.
+ *
+ * Hook fires at function entry (PC 0x80002838). At entry:
+ *   $a0 = arg (push/pop state's arg byte; 0 = unconditional, else
+ *               must match a tag in the saved state)
+ *   $ra = caller PC
+ * sMemPool fields read from rdram at vaddr 0x800A6070 + offsets:
+ *   +0x1C available, +0x28 listHeadL, +0x2C listHeadR, +0x30 mainState
+ * MainPoolState fields at *mainState:
+ *   +0x00 freeSpace, +0x04 listHeadL, +0x08 listHeadR, +0x0C prev
+ * gCurrentGameState lives at vaddr 0x80075668.
+ *
+ * Always-on; logs every pop. Output volume is bounded by the actual
+ * number of pops (not many). */
+void pkmnstadium_pool_pop_log(uint8_t* rdram,
+                              uint32_t arg,
+                              uint32_t caller_pc) {
+    uint32_t pool_paddr = 0x000A6070u;
+    uint32_t avail   = MEM_LOAD_BE32(rdram, pool_paddr + 0x1C);
+    uint32_t headL   = MEM_LOAD_BE32(rdram, pool_paddr + 0x28);
+    uint32_t headR   = MEM_LOAD_BE32(rdram, pool_paddr + 0x2C);
+    uint32_t state_p = MEM_LOAD_BE32(rdram, pool_paddr + 0x30);
+    uint32_t game_state = MEM_LOAD_BE32(rdram, 0x00075668u);
+
+    uint32_t s_free = 0, s_lL = 0, s_lR = 0;
+    if (state_p >= 0x80000000u && state_p < 0x80800000u) {
+        uint32_t sp = state_p & 0x1FFFFFFFu;
+        s_free = MEM_LOAD_BE32(rdram, sp + 0x00);
+        s_lL   = MEM_LOAD_BE32(rdram, sp + 0x04);
+        s_lR   = MEM_LOAD_BE32(rdram, sp + 0x08);
+    }
+    fprintf(stderr,
+        "[pool-pop] arg=0x%X caller=0x%08X gs=0x%08X avail=0x%X "
+        "live(L=0x%08X R=0x%08X) pop_to(state=0x%08X free=0x%X "
+        "L=0x%08X R=0x%08X)\n",
+        arg, caller_pc, game_state, avail,
+        headL, headR, state_p, s_free, s_lL, s_lR);
+    fflush(stderr);
+}
+
 /* n_alFxPull / n_alMainBusPull diagnostic ring for the quick-battle
  * NULL+0xBC crash 2026-05-03. The crash is a write through $v0=0xB8
  * inside n_alMainBusPull right after `jalr $t9` to the bus filter
@@ -1871,6 +1920,85 @@ void pkmnstadium_audio_stop_voices(uint8_t* rdram) {
             "until the next sequence-load reassigns them\n",
             count, arr_vaddr);
         fflush(stderr);
+    }
+
+    /* Stadium-side stop above is necessary but not sufficient: the
+     * libnaudio synth maintains its OWN voice pool (N_PVoice array)
+     * via n_syn->auxBus->sources. Even after Stadium stops feeding
+     * the high-level voice, those low-level N_PVoices keep getting
+     * pulled by n_alAuxBusPull → n_alEnvmixerPull → n_alAdpcmPull
+     * because their em_motion is still AL_PLAYING. n_alAdpcmPull
+     * then reads f->dc_table and friends from soon-to-be-popped
+     * pool memory, computes overflow nOver of ~3.7B samples, emits
+     * a CLEARBUFF cmd whose count wraps DMEM and zeroes the dispatch
+     * table — the post-title audio bug 2026-05-06.
+     *
+     * Walk libnaudio's voice pool and force em_motion=AL_STOPPED so
+     * n_alEnvmixerPull's "if (em_motion != AL_PLAYING) return" gate
+     * kicks them out before any wavetable deref.
+     *
+     * Field offsets (verified against recompiled n_alAuxBusPull and
+     * the N_PVoice struct in n_synthInternals.h):
+     *   n_syn at vaddr 0x80078584 (pointer-to-struct, NOT inline)
+     *     +0x34 auxBus*
+     *   N_ALAuxBus
+     *     +0x14 sourceCount (s32)
+     *     +0x1C sources (N_PVoice**)
+     *   N_PVoice
+     *     +0x84 em_motion (s32; 0 = AL_STOPPED, 1 = AL_PLAYING)
+     */
+    {
+        uint32_t n_syn_var_paddr = 0x00078584u;
+        uint32_t n_syn_vaddr = MEM_LOAD_BE32(rdram, n_syn_var_paddr);
+        if (n_syn_vaddr < 0x80000000u || n_syn_vaddr >= 0x80800000u) {
+            fprintf(stderr,
+                "[audio-stop] n_syn pointer not in RDRAM (0x%08X), "
+                "libnaudio voices not stopped\n", n_syn_vaddr);
+            fflush(stderr);
+            return;
+        }
+        uint32_t n_syn_paddr = n_syn_vaddr & 0x1FFFFFFFu;
+        uint32_t auxBus_vaddr = MEM_LOAD_BE32(rdram, n_syn_paddr + 0x34);
+        if (auxBus_vaddr < 0x80000000u || auxBus_vaddr >= 0x80800000u) {
+            fprintf(stderr,
+                "[audio-stop] auxBus ptr not in RDRAM (0x%08X), skipped\n",
+                auxBus_vaddr);
+            fflush(stderr);
+            return;
+        }
+        uint32_t auxBus_paddr = auxBus_vaddr & 0x1FFFFFFFu;
+        uint32_t source_count = MEM_LOAD_BE32(rdram, auxBus_paddr + 0x14);
+        uint32_t sources_vaddr = MEM_LOAD_BE32(rdram, auxBus_paddr + 0x1C);
+        if (source_count == 0 || source_count > 64 ||
+            sources_vaddr < 0x80000000u || sources_vaddr >= 0x80800000u) {
+            fprintf(stderr,
+                "[audio-stop] auxBus sourceCount=%u sources=0x%08X "
+                "(skipping libnaudio stop)\n",
+                source_count, sources_vaddr);
+            fflush(stderr);
+            return;
+        }
+        uint32_t sources_paddr = sources_vaddr & 0x1FFFFFFFu;
+        uint32_t stopped = 0;
+        for (uint32_t i = 0; i < source_count; i++) {
+            uint32_t pvoice_vaddr = MEM_LOAD_BE32(rdram, sources_paddr + i*4);
+            if (pvoice_vaddr < 0x80000000u || pvoice_vaddr >= 0x80800000u) continue;
+            uint32_t pvoice_paddr = pvoice_vaddr & 0x1FFFFFFFu;
+            /* Write 0 (AL_STOPPED) to em_motion at +0x84. */
+            for (int b = 0; b < 4; b++) {
+                rdram[(pvoice_paddr + 0x84 + b) ^ 3] = 0;
+            }
+            stopped++;
+        }
+        static int s_lib_logged = 0;
+        if (!s_lib_logged) {
+            s_lib_logged = 1;
+            fprintf(stderr,
+                "[audio-stop] libnaudio: zeroed em_motion on %u of %u "
+                "N_PVoice(s) via n_syn->auxBus->sources at 0x%08X\n",
+                stopped, source_count, sources_vaddr);
+            fflush(stderr);
+        }
     }
 }
 

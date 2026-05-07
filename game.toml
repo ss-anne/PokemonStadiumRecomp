@@ -2932,6 +2932,19 @@ func = "n_alLoadParam"
 before_vram = 0x8004F95C
 text = "pkmnstadium_set_wavetable_probe(rdram, ctx->r4, ctx->r5, ctx->r6);"
 
+# main_pool_pop_state caller probe — track who frees memory in the
+# pool. The post-title audio UAF (2026-05-06) traced to a 1 MiB
+# alloc at 0x8018A1B0 that overlaps wavetable structs voices still
+# point at; the bump-allocator can only land there if a pop ran in
+# between. This probe logs every pop's caller PC + gCurrentGameState
+# + pool-top before/after so the post-mortem identifies which Stadium
+# function popped the bank-resident memory without first stopping
+# the voices.
+[[patches.hook]]
+func = "main_pool_pop_state"
+before_vram = 0x80002838
+text = "pkmnstadium_pool_pop_log(rdram, ctx->r4, ctx->r31);"
+
 # n_alFxPull / n_alMainBusPull triangulation for the quick-battle
 # audio cmd-buffer NULL+0xBC crash 2026-05-03. The crash is in
 # n_alMainBusPull (funcs_19.c:4796) at `sw $s7, 0x4($v0)` where
