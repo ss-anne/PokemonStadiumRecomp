@@ -2002,6 +2002,40 @@ void pkmnstadium_audio_stop_voices(uint8_t* rdram) {
     }
 }
 
+/* Thin glue for the generic libnaudio voice UAF protector in librecomp.
+ *
+ * Hooked at main_pool_pop_state entry. Reads sMemPool to compute the
+ * about-to-be-freed range [saved.L, current.L), then forwards to
+ * librecomp_audio_uaf_silence_voices_in_range which walks the libnaudio
+ * voice array (registered at startup in main.cpp) and zeros em_motion
+ * on any voice whose dc_table falls in the freed range.
+ *
+ * sMemPool layout (vaddr 0x800A6070, see pkmnstadium_pool_pop_log):
+ *   +0x28 listHeadL (current bump pointer, low side)
+ *   +0x30 mainState* (pointer to MainPoolState)
+ * MainPoolState (whatever state_v points to):
+ *   +0x04 listHeadL (saved low-side bump pointer to pop back to)
+ *
+ * Single hook subsumes per-scene voice-stop hooks (e.g. the post-title
+ * fragment36 hook at func_8004FF20) for any pop that would orphan an
+ * active voice's wavetable. Stays out of the way otherwise — silenced=0
+ * is logged-quietly inside the librecomp helper. */
+extern int librecomp_audio_uaf_silence_voices_in_range(
+    uint8_t* rdram, uint32_t start_vaddr, uint32_t end_vaddr);
+
+void pkmnstadium_pool_pop_silence_voices(uint8_t* rdram) {
+    uint32_t pool_p = 0x000A6070u;
+    uint32_t cur_L  = MEM_LOAD_BE32(rdram, pool_p + 0x28);
+    uint32_t state_v = MEM_LOAD_BE32(rdram, pool_p + 0x30);
+    if (state_v < 0x80000000u || state_v >= 0x80800000u) return;
+    if (cur_L  < 0x80000000u || cur_L  >= 0x80800000u) return;
+    uint32_t state_p = state_v & 0x1FFFFFFFu;
+    uint32_t saved_L = MEM_LOAD_BE32(rdram, state_p + 0x04);
+    if (saved_L < 0x80000000u || saved_L >= 0x80800000u) return;
+    if (saved_L >= cur_L) return;  /* nothing to free */
+    librecomp_audio_uaf_silence_voices_in_range(rdram, saved_L, cur_L);
+}
+
 /* miniEkansInitCam entry diagnostic.
  *
  * The Ekans minigame (auto-attract path) crashes in miniUpdateCamera

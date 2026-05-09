@@ -54,6 +54,7 @@
 #include "pokestadium_render.h"
 #include "debug_server.h"
 #include <librecomp/ultra_trace.hpp>
+#include <librecomp/audio_uaf_protect.hpp>
 #include "ares_worker.h"
 
 extern "C" void recomp_entrypoint(uint8_t* rdram, recomp_context* ctx);
@@ -753,6 +754,33 @@ int main(int argc, char** argv) {
     // Defined in src/main/rsp_aspmain_hook.cpp.
     pokestadium::rsp::register_pre_task_hooks();
     std::fprintf(stderr, "[PSR] rsp pre-task hooks registered\n"); std::fflush(stderr);
+
+    // Register Stadium's libnaudio voice-list layout so the generic
+    // audio-UAF protector in librecomp can silence voices whose backing
+    // wavetable memory is about to be freed by main_pool_pop_state.
+    //
+    // Walk strategy: pAllocList + pLameList in N_ALSynth catch every
+    // voice the synth might still pull from on the next audio frame
+    // regardless of bus routing — a previous auxBus->sources walk
+    // missed voices that were allocated but routed elsewhere.
+    //
+    // Offsets verified against disasm/src/libnaudio/n_synthInternals.h
+    // (N_PVoice: dc_table=0x20, em_motion=0x84) and recompiled
+    // n_alSynNew at 0x800491C0 (N_ALSynth: pAllocList=0x0C,
+    // pLameList=0x14). n_syn lives at vaddr 0x80078584. The offsets
+    // are libnaudio standards; future libnaudio games can reuse this
+    // registration shape and only swap n_syn_var_vaddr.
+    {
+        librecomp::audio_uaf::VoiceLayout layout{};
+        layout.n_syn_var_vaddr                = 0x80078584u;
+        layout.alloc_list_offset              = 0x0Cu;  // N_ALSynth.pAllocList
+        layout.lame_list_offset               = 0x14u;  // N_ALSynth.pLameList
+        layout.voice_em_motion_offset         = 0x84u;  // N_PVoice.em_motion
+        layout.voice_dc_table_offset          = 0x20u;  // N_PVoice.dc_table
+        layout.voice_em_motion_stopped_value  = 0u;     // AL_STOPPED
+        layout.max_voice_count                = 64u;
+        librecomp::audio_uaf::register_voice_layout(layout);
+    }
 
     // Validate + load the ROM before recomp::start. select_rom verifies
     // the hash matches our registered GameEntry and stashes it as the

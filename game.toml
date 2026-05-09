@@ -2972,10 +2972,18 @@ text = "pkmnstadium_set_wavetable_probe(rdram, ctx->r4, ctx->r5, ctx->r6);"
 # + pool-top before/after so the post-mortem identifies which Stadium
 # function popped the bank-resident memory without first stopping
 # the voices.
+# main_pool_pop_state entry: (a) log the pop for diagnostics and (b)
+# silence libnaudio voices whose wavetable struct lives in the about-to-be
+# -freed range [saved.L, current.L). The voice-silencing logic lives
+# generically in librecomp (audio_uaf_protect.cpp); the layout for finding
+# Stadium's voice array is registered at startup in src/main/main.cpp.
+# This single hook subsumes the prior per-scene fragment36 audio-stop
+# hook (func_8004FF20) and prevents the rental-pokemon UAF + AREA_SELECT
+# UAF + post-title UAF families generically.
 [[patches.hook]]
 func = "main_pool_pop_state"
 before_vram = 0x80002838
-text = "pkmnstadium_pool_pop_log(rdram, ctx->r4, ctx->r31);"
+text = "pkmnstadium_pool_pop_log(rdram, ctx->r4, ctx->r31); pkmnstadium_pool_pop_silence_voices(rdram);"
 
 # n_alFxPull / n_alMainBusPull triangulation for the quick-battle
 # audio cmd-buffer NULL+0xBC crash 2026-05-03. The crash is in
