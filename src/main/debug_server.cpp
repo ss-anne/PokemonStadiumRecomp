@@ -479,7 +479,10 @@ static std::string handle_command(const std::string& line) {
         }
         int n = get_int(line, "n", 128);
         if (n < 1) n = 1;
-        if (n > 1024) n = 1024;
+        // Cap at the ring's actual capacity (bumped to 65536 in
+        // ultramodern/mesgqueue.cpp). Larger pulls let us span menu
+        // transitions without VI tick saturation.
+        if (n > 65536) n = 65536;
         std::vector<MesgEvent> buf(n);
         size_t got = 0;
         uint64_t widx = 0;
