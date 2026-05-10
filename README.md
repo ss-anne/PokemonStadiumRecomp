@@ -59,7 +59,7 @@ PokemonStadiumRecomp/
 ├── n64recomp.pin                   # engine SHA pin
 ├── CMakeLists.txt                  # build entrypoint
 ├── setup.sh / setup.bat            # provisioning
-├── CLAUDE.md / DEBUG.md            # discipline + debug protocol
+├── DEBUG.md                        # divergence triage protocol
 ├── ISSUES.md / MODDING.md
 └── README.md
 ```
@@ -152,7 +152,6 @@ written. Track in `ISSUES.md`.
 
 ## Documentation
 
-- [`CLAUDE.md`](CLAUDE.md) — discipline rules for this project.
 - [`DEBUG.md`](DEBUG.md) — debug + divergence protocol.
 - [`ISSUES.md`](ISSUES.md) — known issues + open work.
 - [`MODDING.md`](MODDING.md) — modding hooks (post-MVP).

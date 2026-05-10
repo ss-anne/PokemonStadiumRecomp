@@ -51,19 +51,18 @@ pret disasm correctness, or genuine game-side UAF that real N64
 hardware also has). Static-analysis triage can narrow but not
 eliminate — we keep ending up with two or three viable hypotheses.
 
-The deterministic decider is the **Ares oracle workflow** per
-`CLAUDE.md`: run Ares against the original ROM and our recomp
-build to the same frame, byte-diff RDRAM, find the first
-divergence, then trace backward to whether the responsible write
-came from recompiled code (→ check pret's claim about that
-address), from a librecomp shim (→ our libultra emu bug), or from
-RT64 (→ renderer bug). The bridge is implemented (see
-`n64recomp/ares-bridge/`) but currently has an in-process blocker
-documented in `project_ares_oracle_inprocess_blocker.md`. The
-recommended next step is the **out-of-process oracle** variant.
-Until that lands, the open bugs are diagnosis-blocked at the
-"which layer" question and we're patching symptoms instead of
-roots.
+The deterministic decider is the **Ares oracle workflow**
+documented in [`DEBUG.md`](DEBUG.md): run Ares against the
+original ROM and our recomp build to the same frame, byte-diff
+RDRAM, find the first divergence, then trace backward to whether
+the responsible write came from recompiled code (→ check pret's
+claim about that address), from a librecomp shim (→ our libultra
+emu bug), or from RT64 (→ renderer bug). The bridge is implemented
+(see `n64recomp/ares-bridge/`) but currently has an in-process
+blocker; the recommended next step is the **out-of-process
+oracle** variant. Until that lands, the open bugs are
+diagnosis-blocked at the "which layer" question and we're patching
+symptoms instead of roots.
 
 ## Scaffolding (current phase)
 

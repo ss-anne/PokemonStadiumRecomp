@@ -63,3 +63,8 @@ tools/_splice.py
 # baserom.z64 + the script. The script is the source of truth.
 tools/*_decompressed.bin
 lib/
+
+# Internal docs kept locally only — see the `internal` branch for
+# the full snapshot of these files at the point they were untracked.
+CLAUDE.md
+TO_ADAPT_FROM_BATTLESHIP.md
