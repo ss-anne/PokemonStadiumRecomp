@@ -145,6 +145,47 @@ static void set_application_user_config(RT64::Application* application,
     application->userConfig.refreshRateTarget = config.rr_manual_value;
     application->userConfig.internalColorFormat = to_rt64(config.hpfb_option);
     application->userConfig.displayBuffering = RT64::UserConfiguration::DisplayBuffering::Triple;
+
+    // PSR diagnostic overrides for menu-sprite-corruption investigation
+    // (dev/sprite-corruption-menu-borders branch). RT64's defaults are
+    // filtering=AntiAliasedPixelScaling, upscale2D=ScaledOnly,
+    // threePointFiltering=true. The visible yellow dashed lines on
+    // stretched texrects (panel decorations) might come from any of
+    // these. Setting env vars short-circuits to specific values; an
+    // unset/empty env var leaves the default.
+    if (const char* f = std::getenv("PSR_RT64_FILTERING")) {
+        if (!std::strcmp(f, "Nearest")) {
+            application->userConfig.filtering = RT64::UserConfiguration::Filtering::Nearest;
+            std::fprintf(stderr, "[psr-rt64] forced filtering = Nearest\n");
+        } else if (!std::strcmp(f, "Linear")) {
+            application->userConfig.filtering = RT64::UserConfiguration::Filtering::Linear;
+            std::fprintf(stderr, "[psr-rt64] forced filtering = Linear\n");
+        } else if (!std::strcmp(f, "AAPS")) {
+            application->userConfig.filtering = RT64::UserConfiguration::Filtering::AntiAliasedPixelScaling;
+            std::fprintf(stderr, "[psr-rt64] forced filtering = AntiAliasedPixelScaling\n");
+        }
+    }
+    if (const char* u = std::getenv("PSR_RT64_UPSCALE2D")) {
+        if (!std::strcmp(u, "Original")) {
+            application->userConfig.upscale2D = RT64::UserConfiguration::Upscale2D::Original;
+            std::fprintf(stderr, "[psr-rt64] forced upscale2D = Original\n");
+        } else if (!std::strcmp(u, "ScaledOnly")) {
+            application->userConfig.upscale2D = RT64::UserConfiguration::Upscale2D::ScaledOnly;
+            std::fprintf(stderr, "[psr-rt64] forced upscale2D = ScaledOnly\n");
+        } else if (!std::strcmp(u, "All")) {
+            application->userConfig.upscale2D = RT64::UserConfiguration::Upscale2D::All;
+            std::fprintf(stderr, "[psr-rt64] forced upscale2D = All\n");
+        }
+    }
+    if (const char* tp = std::getenv("PSR_RT64_THREEPOINT")) {
+        if (!std::strcmp(tp, "0") || !std::strcmp(tp, "false")) {
+            application->userConfig.threePointFiltering = false;
+            std::fprintf(stderr, "[psr-rt64] forced threePointFiltering = false\n");
+        } else {
+            application->userConfig.threePointFiltering = true;
+            std::fprintf(stderr, "[psr-rt64] forced threePointFiltering = true\n");
+        }
+    }
 }
 
 static ultramodern::renderer::SetupResult map_setup_result(RT64::Application::SetupResult rt64_result) {

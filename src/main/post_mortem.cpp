@@ -406,13 +406,17 @@ void dump_libultra_json(FILE* f, int n_max) {
     std::fprintf(f, "]},\n");
 }
 
-// Capture the bytes of the LAST M_GFXTASK that was submitted before
-// freeze, written to build/last_run_freeze_dl.bin. Used to diagnose
-// hangs inside RT64::Interpreter::processDisplayLists where send_dl
-// started but dp_complete never fired (submit_gfx > dp_complete).
-// Offline GBI decoders read the bin to find the offending command.
-void dump_last_gfx_dl_to_file() {
-    if (recomp_sp_task_event_size() != sizeof(SpTaskEvent)) return;
+// Capture the bytes of the LAST M_GFXTASK from the SP task ring to a
+// caller-specified path. Used to diagnose hangs inside RT64::Interpreter
+// (where freeze handler dumps to build/last_run_freeze_dl.bin) and for
+// on-demand inspection of any visible DL via the debug_server
+// "dump_current_dl" command (e.g. capturing a corrupted-sprite frame
+// for offline GBI decoding).
+//
+// Returns 0 on success, negative on each distinct failure mode so the
+// caller can surface a useful error message.
+static int dump_last_gfx_dl_to_path_inner(const char* path) {
+    if (recomp_sp_task_event_size() != sizeof(SpTaskEvent)) return -1;
     // 4096 matches the ring cap in librecomp/sp.cpp. The post-freeze
     // audio flood would push gfx events out of a smaller window.
     std::vector<SpTaskEvent> buf(4096);
@@ -424,18 +428,18 @@ void dump_last_gfx_dl_to_file() {
         const auto& e = buf[i - 1];
         if (e.task_type == 1 /* M_GFXTASK */) { last_gfx = &e; break; }
     }
-    if (!last_gfx) return;
+    if (!last_gfx) return -2;
     uint8_t* rdram = recomp_runtime_get_rdram();
-    if (!rdram) return;
+    if (!rdram) return -3;
     uint32_t addr = last_gfx->data_ptr;
     uint32_t size = last_gfx->data_size;
-    if (size == 0 || size > 0x100000) return;
-    if (addr < 0x80000000u) return;
+    if (size == 0 || size > 0x100000) return -4;
+    if (addr < 0x80000000u) return -5;
     uint32_t off = addr - 0x80000000u;
     constexpr uint32_t RDRAM_END = 0x800000u;
-    if (off >= RDRAM_END || off + size > RDRAM_END) return;
-    FILE* bf = std::fopen("build/last_run_freeze_dl.bin", "wb");
-    if (!bf) return;
+    if (off >= RDRAM_END || off + size > RDRAM_END) return -6;
+    FILE* bf = std::fopen(path, "wb");
+    if (!bf) return -7;
     // Byte access into rdram uses XOR-by-3 endian compensation (host
     // is LE, rdram bytes are stored as if BE word-swapped). See the
     // rdram_peek path in debug_server.cpp for the same pattern.
@@ -444,6 +448,36 @@ void dump_last_gfx_dl_to_file() {
         std::fwrite(&b, 1, 1, bf);
     }
     std::fclose(bf);
+    return 0;
+}
+
+void dump_last_gfx_dl_to_file() {
+    dump_last_gfx_dl_to_path_inner("build/last_run_freeze_dl.bin");
+}
+
+// Public entry for debug_server's "dump_current_dl" command. Returns
+// the same status codes as the inner. Also reports the size+addr of
+// the dumped DL via out-params for the caller's response JSON.
+extern "C" int psr_dump_current_dl(const char* path,
+                                   uint32_t* out_addr,
+                                   uint32_t* out_size) {
+    if (out_addr) *out_addr = 0;
+    if (out_size) *out_size = 0;
+    if (recomp_sp_task_event_size() != sizeof(SpTaskEvent)) return -1;
+    std::vector<SpTaskEvent> buf(4096);
+    size_t got = 0;
+    uint64_t widx = 0;
+    recomp_sp_task_recent_copy(buf.data(), buf.size(), &got, &widx);
+    const SpTaskEvent* last_gfx = nullptr;
+    for (size_t i = got; i > 0; --i) {
+        const auto& e = buf[i - 1];
+        if (e.task_type == 1 /* M_GFXTASK */) { last_gfx = &e; break; }
+    }
+    if (last_gfx) {
+        if (out_addr) *out_addr = last_gfx->data_ptr;
+        if (out_size) *out_size = last_gfx->data_size;
+    }
+    return dump_last_gfx_dl_to_path_inner(path);
 }
 
 // Mirror of the in-rt64 CfEvent layout — keep in lockstep.

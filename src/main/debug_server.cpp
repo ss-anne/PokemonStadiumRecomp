@@ -176,6 +176,16 @@ extern "C" void recomp_sp_task_recent_copy(
     void* out_void, size_t cap, size_t* n_written, uint64_t* next_seq_out);
 extern "C" size_t recomp_sp_task_event_size(void);
 extern "C" void psr_post_mortem_dump(const char* reason, void* fault_info);
+extern "C" int psr_dump_current_dl(const char* path,
+                                   uint32_t* out_addr,
+                                   uint32_t* out_size);
+// Defined in lib/rt64/src/hle/rt64_rsp.cpp under #if RT64_PSR_DEBUG_HOOKS.
+// We always link against rt64.lib so the symbol is present whenever
+// RT64_PSR_DEBUG_HOOKS=1 in the rt64 build (default in PSR's CMake).
+// Declared with weak-import semantics on platforms that support it
+// (none on MSVC) so a future RT64_PSR_DEBUG_HOOKS=0 build doesn't fail
+// the link — for now we just rely on the default being on.
+extern "C" void rt64_psr_segments_copy(uint32_t* out16, uint64_t* out_seq);
 
 // Map button name → N64 contStat bit.
 static uint16_t button_bit(const std::string& n) {
@@ -952,6 +962,48 @@ static std::string handle_command(const std::string& line) {
         }
         out += "]}";
         return out;
+    }
+    if (cmd == "rt64_segments") {
+        // RT64's resolved segment table — gSegments[0..15] as the
+        // interpreter sees them. Updated whenever the game emits
+        // gsSPSegment via G_MOVEWORD. Used to triangulate stale-
+        // segment binding bugs (e.g. menu sprite/border corruption
+        // in Stadium where seg 3 textures resolve to wrong RDRAM).
+        // Backed by the RT64_PSR_DEBUG_HOOKS-gated snapshot in
+        // rt64_rsp.cpp; if that define is 0 the symbol won't exist
+        // and the link will fail — that's intentional, you opted out.
+        uint32_t segs[16] = {};
+        uint64_t seq = 0;
+        rt64_psr_segments_copy(segs, &seq);
+        std::string out = R"({"ok":true,"seq":)" + std::to_string(seq) +
+                          R"(,"segments":[)";
+        for (int i = 0; i < 16; i++) {
+            char b[24];
+            std::snprintf(b, sizeof(b), "%u", (unsigned)segs[i]);
+            if (i) out += ",";
+            out += b;
+        }
+        out += "]}";
+        return out;
+    }
+    if (cmd == "dump_current_dl") {
+        // Walk the SP task ring buffer for the last M_GFXTASK and dump
+        // its bytes from rdram to a file. Always-on, query-by-window:
+        // every gfx submit is in the ring; this command consumes it
+        // without any "arm + capture" timing dance. Used to capture
+        // the DL feeding any visible frame (e.g. a sprite-corruption
+        // repro screen) for offline GBI decoding.
+        std::string path = "F:/Projects/PokemonStadiumRecomp/build/last_run_dl.bin";
+        std::string p = get_str(line, "path");
+        if (!p.empty()) path = p;
+        uint32_t addr = 0, size = 0;
+        int rc = psr_dump_current_dl(path.c_str(), &addr, &size);
+        char buf[512];
+        std::snprintf(buf, sizeof(buf),
+            "{\"ok\":%s,\"rc\":%d,\"path\":\"%s\",\"addr\":%u,\"size\":%u}",
+            rc == 0 ? "true" : "false", rc, path.c_str(),
+            (unsigned)addr, (unsigned)size);
+        return buf;
     }
     if (cmd == "tail_errlog") {
         FILE* f = fopen("F:/Projects/PokemonStadiumRecomp/build/last_error.log", "rb");
