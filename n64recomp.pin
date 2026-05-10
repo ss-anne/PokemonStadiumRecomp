@@ -13,6 +13,8 @@
 # To roll forward to a newer engine commit: bump the sha below.
 # To track the dev tip during active iteration: comment out the sha
 # line and set `branch = dev` instead.
-sha = 5b7c6a68ae358d3d04bf54e51659c53c3a95db14
-# "recompilation: exclude section-base refs from reloc remap"
-# (fixes attract softlock — over-aggressive remap from 6e9b34e)
+sha = fad8a9cafec06189a927155a350e0596459e6b4a
+# "recomp: mask host rdram offset in MEM_W/H/B macros"
+# (turns out-of-range vaddr loads into garbage reads instead of
+# host SEGVs — matches N64 silent-wrap; rescued the Register
+# Pokemon screen from a recurring audio-UAF host crash)

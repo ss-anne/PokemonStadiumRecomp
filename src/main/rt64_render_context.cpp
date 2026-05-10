@@ -9,6 +9,15 @@
  * If/when we add a UI overlay later, restore set_render_hooks()
  * with a real implementation. For now the RT64 application runs
  * without UI hooks — the game's frame buffer is rendered directly.
+ *
+ * Modified 2026 by Matthew Stanley:
+ *   - Diagnostic env-var overrides for menu-sprite-corruption
+ *     investigation (PSR_RT64_RES_MULT, PSR_RT64_FILTERING,
+ *     PSR_RT64_UPSCALE2D, PSR_RT64_THREEPOINT) so we can short-
+ *     circuit user-config to specific values without touching
+ *     persistent state.
+ *
+ * Copyright (c) 2026 Matthew Stanley
  */
 
 // NOMINMAX must be defined before any include that pulls in Windows.h
@@ -153,6 +162,18 @@ static void set_application_user_config(RT64::Application* application,
     // stretched texrects (panel decorations) might come from any of
     // these. Setting env vars short-circuits to specific values; an
     // unset/empty env var leaves the default.
+    if (const char* r = std::getenv("PSR_RT64_RES_MULT")) {
+        char* end = nullptr;
+        double m = std::strtod(r, &end);
+        if (end != r && m >= 1.0 && m <= 16.0) {
+            application->userConfig.resolution = RT64::UserConfiguration::Resolution::Manual;
+            application->userConfig.resolutionMultiplier = m;
+            application->userConfig.downsampleMultiplier = 1;
+            std::fprintf(stderr, "[psr-rt64] forced resolution = Manual, resolutionMultiplier = %.2f, downsampleMultiplier = 1\n", m);
+        } else {
+            std::fprintf(stderr, "[psr-rt64] PSR_RT64_RES_MULT='%s' rejected (need float in [1.0, 16.0])\n", r);
+        }
+    }
     if (const char* f = std::getenv("PSR_RT64_FILTERING")) {
         if (!std::strcmp(f, "Nearest")) {
             application->userConfig.filtering = RT64::UserConfiguration::Filtering::Nearest;

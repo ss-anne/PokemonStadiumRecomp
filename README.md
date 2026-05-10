@@ -3,9 +3,17 @@
 Static recompilation of **Pokémon Stadium (US v1.0)** to native PC.
 Built on top of [N64Recomp](https://github.com/N64Recomp/N64Recomp).
 
-> **Status: Scaffolded.** Project skeleton in place. ROM verified
-> against pret target hash. Recompilation pipeline not yet wired —
-> next step is overlay extraction + first translator pass.
+> **Status: Playable end-to-end (with known visible bugs).** Quick
+> Battle, Free Battle, Stadium cups, and Gym Leader Castle have all
+> been validated through a complete round. Audio plays at 50% by
+> default (`PSR_VOLUME=0.5`). See [`ISSUES.md`](ISSUES.md) for the
+> remaining visible glitches (small clicks during music, a
+> corrupted cursor on a few menu screens, gridline patterns through
+> certain HUD elements).
+>
+> **Transfer Pak is not supported** at this time. Game Pak Check
+> will report Game Pak slots as empty; everything that doesn't
+> require a connected Game Boy cart works normally.
 
 ## ROM
 

@@ -3,6 +3,46 @@
 Living list of known gaps. Use this as a pre-flight before starting
 a new work session.
 
+## Current playable build — known visible issues
+
+The base game runs end-to-end (Quick Battle, Free Battle, Stadium
+cups, Gym Leader Castle have been validated) but the following
+visible imperfections remain:
+
+- [ ] **Small clicking sound between audio chunks** during music
+      sequences. Tempo-tracking, only on music (not SFX, not
+      announcer / dialog). Sub-catastrophic DSP fidelity issue;
+      detailed hypothesis + diagnostic next-steps recorded under
+      [Audio → Music-rate periodic tick](#audio) below.
+
+- [ ] **Visually corrupted "hand" pointer / cursor sprite** on
+      certain menus (e.g. Gym Leader Castle Registration's
+      "Register Pokémon" entry — sparkly/glittery sprite where a
+      clean icon should be). Pattern: pointer texture renders with
+      garbled bytes that worsen across repeated entries to the same
+      screen, suggesting an accumulating-stale-state UAF in the
+      cursor/icon allocator. Same screen used to soft-lock after
+      a few entries — that hard crash is now fixed (n64recomp
+      MEM_W mask 2026-05-10) but the visual glitch remains.
+
+- [ ] **Line patterns through HUD elements across menus.**
+      Persistent on Game Pak Check screen (yellow gridlines through
+      blue Game-Pak panels and the red WARNING banner; not just
+      background bleed-through — confirmed something is hidden
+      behind Player 2 panel). Intermittent on rental-pokemon select
+      borders. Lives below user-config (filtering / upscale2D /
+      threePointFiltering all tested no-op). Native 240p doesn't
+      fix it (`PSR_RT64_RES_MULT=1` ruled out high-res rasterizer).
+      Investigation paused 2026-05-10; diagnostic infra committed
+      on `dev/sprite-corruption-menu-borders`.
+
+- [ ] **Active per-site workarounds in `extras.c` / `game.toml`
+      should migrate to proper runtime fixes.** Tracked in
+      [`TEMP_PATCHES.md`](TEMP_PATCHES.md) — currently 2 active
+      entries (`free-battle-modal-softlock`, `petit-cup-softlock`),
+      both expected to be retired together when N64ModernRuntime /
+      ultramodern grows voluntary preemption of stuck game threads.
+
 ## Scaffolding (current phase)
 
 - [ ] Replace placeholder SHA in `n64recomp.pin` with the real
