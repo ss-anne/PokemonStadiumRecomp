@@ -56,6 +56,9 @@ extern "C" {
     uint64_t pkmnstadium_interesting_fn_count(int idx);
     const char* pkmnstadium_interesting_fn_name(int idx);
     int pkmnstadium_interesting_fn_total(void);
+    uint64_t pkmnstadium_sched_tick_invocations(void);
+    uint64_t pkmnstadium_sched_tick_threshold_hits(void);
+    uint64_t pkmnstadium_sched_tick_gap_skips(void);
     int pkmnstadium_resolver_log_total(void);
     void pkmnstadium_resolver_log_get(int idx, uint32_t* arr, uint32_t* base, uint32_t* count);
 }
@@ -266,13 +269,14 @@ static std::string handle_command(const std::string& line) {
         // linkage. A sustained nonzero value means some target
         // OSMesgQueue's receiver is being starved relative to
         // host-thread event posts.
-        char buf[1024];
+        char buf[1280];
         std::snprintf(buf, sizeof(buf),
             "{\"ok\":true,\"frame\":%llu,\"vi\":%llu,\"fast_forward\":%s,\"input_override\":%s,\"buttons\":%u,\"sx\":%d,\"sy\":%d,"
             "\"send_dl\":%llu,\"send_dl_gfx\":%llu,\"send_dl_audio\":%llu,\"send_dl_other\":%llu,\"update_screen\":%llu,"
             "\"external_requeues\":%llu,"
             "\"submit_gfx\":%llu,\"submit_audio\":%llu,\"submit_other\":%llu,"
-            "\"sp_complete\":%llu,\"dp_complete\":%llu}",
+            "\"sp_complete\":%llu,\"dp_complete\":%llu,"
+            "\"sched_tick_invocations\":%llu,\"sched_tick_threshold_hits\":%llu,\"sched_tick_gap_skips\":%llu}",
             (unsigned long long)g_frame_count.load(),
             (unsigned long long)g_vi_ticks.load(),
             g_fast_forward.load() ? "true" : "false",
@@ -290,7 +294,10 @@ static std::string handle_command(const std::string& line) {
             (unsigned long long)ultramodern_submit_audio_count(),
             (unsigned long long)ultramodern_submit_other_count(),
             (unsigned long long)ultramodern_sp_complete_count(),
-            (unsigned long long)ultramodern_dp_complete_count()
+            (unsigned long long)ultramodern_dp_complete_count(),
+            (unsigned long long)pkmnstadium_sched_tick_invocations(),
+            (unsigned long long)pkmnstadium_sched_tick_threshold_hits(),
+            (unsigned long long)pkmnstadium_sched_tick_gap_skips()
         );
         return buf;
     }

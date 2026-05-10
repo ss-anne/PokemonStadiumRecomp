@@ -233,7 +233,102 @@ static const char* const k_interesting_fns[INTERESTING_FN_COUNT] = {
 };
 static volatile uint64_t k_interesting_counts[INTERESTING_FN_COUNT];
 
+/* Busy-wait detection drives voluntary preemption of the cooperative
+ * scheduler. If a game thread tight-loops on a predicate function
+ * without entering a libultra primitive, no other thread runs and the
+ * predicate never flips → softlock (Petit Cup confirm screen, Free
+ * Battle modal pre-Option-B). Two conjunctive checks gate the yield
+ * to keep its blast radius small:
+ *
+ *  1. Same-function-pointer count >= 1,000,000. String literals are
+ *     deduped by the linker so pointer identity is function identity.
+ *     Effectively: only flat predicate loops (while (P()) {}) hit
+ *     this — multi-function loops cycle through different pointers.
+ *  2. Wall-clock >= 100 ms since the last yield (or thread start).
+ *     Even a fragment-search inner loop that hits 1M same-fn calls
+ *     completes in well under 100 ms; only a true softlock keeps the
+ *     same-fn streak alive that long.
+ *
+ * Earlier shapes failed:
+ *   - Time-based-only fired mid-Memmap_RelocateFragment eviction and
+ *     corrupted the registry → deterministic geo-layout crash.
+ *   - Same-fn-only at threshold 4096 fired during a fragment-lookup
+ *     loop in attract (Memmap_GetFragmentVaddr × ~4k) → same crash.
+ * The two-factor gate above keeps yields out of any reasonable game-
+ * thread inner loop while still unsticking real softlocks within ~1 s.
+ *
+ * Env var PSR_DISABLE_SCHEDULER_TICK=1 short-circuits the yield call
+ * for triage runs (keeps detection counters going for offline review).
+ */
+extern void ultramodern_scheduler_tick(void);
+
+#ifdef _MSC_VER
+#  define PSR_TLS __declspec(thread)
+#else
+#  define PSR_TLS _Thread_local
+#endif
+
+#include <time.h>
+
+#define BUSY_WAIT_SAMEFN_THRESHOLD 1000000
+#define BUSY_WAIT_MIN_GAP_NS       100000000ULL  /* 100 ms */
+
+static PSR_TLS const char* g_last_fn_ptr = NULL;
+static PSR_TLS uint32_t g_same_fn_count = 0;
+static PSR_TLS uint64_t g_last_yield_ns = 0;
+
+/* Diagnostic counters surfaced for offline triage. */
+static volatile uint64_t g_sched_tick_invocations = 0;
+static volatile uint64_t g_sched_tick_threshold_hits = 0;
+static volatile uint64_t g_sched_tick_gap_skips = 0;
+static int g_sched_tick_disabled = -1; /* -1 = not yet probed */
+
+uint64_t pkmnstadium_sched_tick_invocations(void) {
+    return __atomic_load_n(&g_sched_tick_invocations, __ATOMIC_RELAXED);
+}
+uint64_t pkmnstadium_sched_tick_threshold_hits(void) {
+    return __atomic_load_n(&g_sched_tick_threshold_hits, __ATOMIC_RELAXED);
+}
+uint64_t pkmnstadium_sched_tick_gap_skips(void) {
+    return __atomic_load_n(&g_sched_tick_gap_skips, __ATOMIC_RELAXED);
+}
+
+static inline uint64_t monotonic_ns(void) {
+    struct timespec ts;
+    timespec_get(&ts, TIME_UTC);
+    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+}
+
 void pkmnstadium_trace_entry(const char *func) {
+    if (func == g_last_fn_ptr) {
+        if (++g_same_fn_count >= BUSY_WAIT_SAMEFN_THRESHOLD) {
+            __atomic_fetch_add(&g_sched_tick_threshold_hits, 1, __ATOMIC_RELAXED);
+            uint64_t now_ns = monotonic_ns();
+            if (now_ns - g_last_yield_ns < BUSY_WAIT_MIN_GAP_NS) {
+                __atomic_fetch_add(&g_sched_tick_gap_skips, 1, __ATOMIC_RELAXED);
+                /* Not enough wall-clock has passed since the last yield
+                 * (or thread start). Reset the same-fn counter so we
+                 * accumulate again from zero rather than re-firing on
+                 * every subsequent call. */
+                g_same_fn_count = 0;
+            } else {
+                if (g_sched_tick_disabled < 0) {
+                    const char *e = getenv("PSR_DISABLE_SCHEDULER_TICK");
+                    g_sched_tick_disabled = (e && e[0] == '1') ? 1 : 0;
+                }
+                if (!g_sched_tick_disabled) {
+                    __atomic_fetch_add(&g_sched_tick_invocations, 1, __ATOMIC_RELAXED);
+                    ultramodern_scheduler_tick();
+                }
+                g_last_yield_ns = monotonic_ns();
+                g_same_fn_count = 0;
+            }
+        }
+    } else {
+        g_last_fn_ptr = func;
+        g_same_fn_count = 0;
+    }
+
     uint64_t idx = __atomic_fetch_add(&trace_ring_write_idx, 1, __ATOMIC_RELAXED);
     trace_ring[idx & (TRACE_RING_CAP - 1)] = func;
 
